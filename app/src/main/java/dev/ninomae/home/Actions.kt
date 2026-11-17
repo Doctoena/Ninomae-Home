@@ -97,7 +97,8 @@ object Actions {
     fun global(ctx: Context, action: Int, delay: Long = 0) {
         val svc = SplitService.instance
         if (svc == null) {
-            toast(ctx, "Turn on Ninomae Home in Accessibility for this")
+            val switchedOn = (Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: "").contains(ctx.packageName)
+            toast(ctx, if (switchedOn) "Android disconnected Ninomae Home's accessibility. Switch it off and on again." else "Turn on Ninomae Home in Accessibility for this")
             openAccessibility(ctx)
             return
         }

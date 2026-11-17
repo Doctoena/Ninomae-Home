@@ -77,7 +77,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
-enum class Layer { None, Sidebar, Drawer, Menu, PairMenu, PairMaker, Settings, Widgets, Folder, Rename }
+enum class Layer { None, Deck, Apps, Menu, PairMenu, PairMaker, Settings, Widgets, Folder, Rename }
 
 /** Which overlay is open, what's being held or dragged, and where the grid and dock sit. */
 class Ui {
@@ -91,17 +91,25 @@ class Ui {
     var searchFocus by mutableStateOf(false)
     var screenHpx by mutableFloatStateOf(2000f)
     var screenWdp by mutableFloatStateOf(400f)
+    /** Set by the activity: ask Android for permissions, and bumped when the answer comes back. */
+    var askPermissions: (Array<String>) -> Unit = {}
+    var permissionTick by mutableIntStateOf(0)
+    var backup: () -> Unit = {}
+    var restore: () -> Unit = {}
+
+    /** Which widget each stack is showing (for taking one out). */
+    val stackPage = androidx.compose.runtime.mutableStateMapOf<String, Int>()
 
     /** Let go of the deck: a flick or past a third opens it, otherwise it slides back. */
     fun settleDeck(velocityY: Float) {
         val open = velocityY > 1400f || (velocityY > -1400f && deck > 0.33f)
-        layer = if (open) Layer.Sidebar else if (layer == Layer.Sidebar) Layer.None else layer
+        layer = if (open) Layer.Deck else if (layer == Layer.Deck) Layer.None else layer
         gesturing = false
     }
 
     fun settleSheet(velocityY: Float) {
         val open = velocityY < -1400f || (velocityY < 1400f && sheet > 0.33f)
-        layer = if (open) Layer.Drawer else if (layer == Layer.Drawer) Layer.None else layer
+        layer = if (open) Layer.Apps else if (layer == Layer.Apps) Layer.None else layer
         gesturing = false
     }
 
@@ -202,13 +210,20 @@ fun Home(st: HomeState, ui: Ui) {
         val density = LocalDensity.current
         val screenHpx = with(density) { screenH.toPx() }
         SideEffect { ui.screenHpx = screenHpx; ui.screenWdp = screenW.value }
+        val ctxHome = LocalContext.current
+        LaunchedEffect(Unit) {
+            while (true) {
+                kotlinx.coroutines.delay(10 * 60_000L)
+                Glance.refresh(ctxHome, st)
+            }
+        }
 
         // The deck and sheet follow the finger; otherwise they spring to wherever the layer says.
         LaunchedEffect(ui.layer, ui.gesturing) {
-            if (!ui.gesturing) animate(ui.deck, if (ui.layer == Layer.Sidebar) 1f else 0f, animationSpec = spring(0.84f, 380f)) { v, _ -> ui.deck = v }
+            if (!ui.gesturing) animate(ui.deck, if (ui.layer == Layer.Deck) 1f else 0f, animationSpec = spring(0.84f, 380f)) { v, _ -> ui.deck = v }
         }
         LaunchedEffect(ui.layer, ui.gesturing) {
-            if (!ui.gesturing) animate(ui.sheet, if (ui.layer == Layer.Drawer) 1f else 0f, animationSpec = spring(0.86f, 400f)) { v, _ -> ui.sheet = v }
+            if (!ui.gesturing) animate(ui.sheet, if (ui.layer == Layer.Apps) 1f else 0f, animationSpec = spring(0.86f, 400f)) { v, _ -> ui.sheet = v }
         }
 
         // Ninomae's bar or Samsung's status bar, chosen per screen in settings.
@@ -218,7 +233,7 @@ fun Home(st: HomeState, ui: Ui) {
 
         val open = ui.layer != Layer.None
         val floating = ui.layer == Layer.Menu || ui.layer == Layer.PairMenu
-        val panel = open && !floating && ui.layer != Layer.Sidebar && ui.layer != Layer.Drawer
+        val panel = open && !floating && ui.layer != Layer.Deck && ui.layer != Layer.Apps
         val panelDim by animateFloatAsState(if (panel) 0.4f else if (floating) 0.18f else 0f, label = "dim")
         val dim = maxOf(panelDim, ui.deck * 0.72f, ui.sheet * 0.5f)
         val behind = maxOf(ui.deck, ui.sheet)
@@ -253,7 +268,7 @@ fun Home(st: HomeState, ui: Ui) {
         }
 
         // ---------- control deck: pulled down from the top ----------
-        if (ui.deck > 0.001f || ui.layer == Layer.Sidebar) {
+        if (ui.deck > 0.001f || ui.layer == Layer.Deck) {
             Box(insets) {
                 Deck(
                     st, ui, ui.deck,
@@ -270,7 +285,7 @@ fun Home(st: HomeState, ui: Ui) {
 
         // ---------- all apps: a sheet from the bottom ----------
         val sheetH = if (compact) screenH * 0.9f else minOf(screenH * 0.86f, 760.dp)
-        if (ui.sheet > 0.001f || ui.layer == Layer.Drawer) {
+        if (ui.sheet > 0.001f || ui.layer == Layer.Apps) {
             Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))) {
                 Sheet(
                     st, ui, ui.sheet, compact, with(density) { sheetH.toPx() },
@@ -323,7 +338,7 @@ private fun SearchPill(ui: Ui) {
         RoundedCornerShape(25.dp),
         pal.l3.copy(alpha = 0.94f),
         edge = true,
-        onClick = { ui.searchFocus = true; ui.layer = Layer.Drawer },
+        onClick = { ui.searchFocus = true; ui.layer = Layer.Apps },
     ) {
         Row(Modifier.fillMaxSize().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Glyph("search", size = 21.dp, color = pal.sub)
@@ -430,9 +445,10 @@ private fun Ghost(st: HomeState, ui: Ui) {
     val density = LocalDensity.current
     val src = ui.drag?.src ?: return
     val item = src.item
-    val big = item != null && item.resizable
-    val wDp = if (big) (ui.cellWdp * item!!.w).dp else 60.dp
-    val hDp = if (big) (ui.cellHdp * item!!.h).dp else 60.dp
+    val span = item?.takeIf { it.resizable }
+    val big = span != null
+    val wDp = if (span != null) (ui.cellWdp * span.w).dp else 60.dp
+    val hDp = if (span != null) (ui.cellHdp * span.h).dp else 60.dp
     val wPx = with(density) { wDp.toPx() }
     val hPx = with(density) { hDp.toPx() }
     Box(

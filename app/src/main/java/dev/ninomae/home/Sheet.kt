@@ -90,12 +90,12 @@ fun Sheet(st: HomeState, ui: Ui, p: Float, compact: Boolean, sheetHeightPx: Floa
 
     // Opening for a search (the home search pill) puts the cursor in the field.
     LaunchedEffect(ui.layer, ui.searchFocus) {
-        if (ui.layer == Layer.Drawer && ui.searchFocus) {
+        if (ui.layer == Layer.Apps && ui.searchFocus) {
             runCatching { focus.requestFocus() }
             keyboard?.show()
             ui.searchFocus = false
         }
-        if (ui.layer != Layer.Drawer) {
+        if (ui.layer != Layer.Apps) {
             q = ""
             keyboard?.hide()
         }
@@ -127,6 +127,11 @@ fun Sheet(st: HomeState, ui: Ui, p: Float, compact: Boolean, sheetHeightPx: Floa
         out to index
     }
     val searching = q.isNotBlank()
+    val calc = remember(q) { Search.calc(q) ?: Search.convert(q) }
+    val settingsHits = remember(q) { Search.settings(q) }
+    val contacts by androidx.compose.runtime.produceState(emptyList<Answer.Contact>(), q, ui.permissionTick) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Search.contacts(ctx, q.trim()) }
+    }
 
     Piece(
         modifier.graphicsLayer { translationY = (1f - p) * sheetHeightPx },
@@ -148,6 +153,9 @@ fun Sheet(st: HomeState, ui: Ui, p: Float, compact: Boolean, sheetHeightPx: Floa
                     contentPadding = PaddingValues(start = 10.dp, end = if (searching) 10.dp else 26.dp, bottom = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
+                    if (searching && calc != null) {
+                        item(span = { GridItemSpan(maxLineSpan) }, key = "calc") { CalcCard(calc) }
+                    }
                     if (!searching) {
                         if (suggested.isNotEmpty() && !games) {
                             header("Suggested", pal.sub, false)
@@ -164,7 +172,26 @@ fun Sheet(st: HomeState, ui: Ui, p: Float, compact: Boolean, sheetHeightPx: Floa
                     if (searching) {
                         item(span = { GridItemSpan(maxLineSpan) }, key = "web") {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                if (shown.isEmpty()) Lbl("No apps match “${q.trim()}”", Modifier.fillMaxWidth().padding(12.dp), color = pal.sub, align = TextAlign.Center)
+                                if (shown.isEmpty() && calc == null && contacts.isEmpty() && settingsHits.isEmpty()) {
+                                    Lbl("No apps match “${q.trim()}”", Modifier.fillMaxWidth().padding(12.dp), color = pal.sub, align = TextAlign.Center)
+                                }
+                                if (contacts.isNotEmpty()) {
+                                    Lbl("Contacts", Modifier.padding(start = 8.dp, top = 6.dp, bottom = 2.dp), size = 12.sp, color = pal.sub)
+                                    contacts.forEachIndexed { i, c -> ContactRow(c, i == 0, i == contacts.lastIndex) { ui.close() } }
+                                } else if (!Search.canReadContacts(ctx) && q.trim().length >= 2 && st.searchContacts) {
+                                    SearchOut("person_search", "Search your contacts too", RoundedCornerShape(18.dp)) {
+                                        ui.askPermissions(arrayOf(android.Manifest.permission.READ_CONTACTS))
+                                    }
+                                }
+                                if (settingsHits.isNotEmpty()) {
+                                    Lbl("Settings", Modifier.padding(start = 8.dp, top = 6.dp, bottom = 2.dp), size = 12.sp, color = pal.sub)
+                                    settingsHits.forEachIndexed { i, h ->
+                                        val t = if (i == 0) 18.dp else 5.dp
+                                        val b = if (i == settingsHits.lastIndex) 18.dp else 5.dp
+                                        SearchOut(h.glyph, h.name, corners(t, t, b, b)) { Search.openSetting(ctx, h); ui.close() }
+                                    }
+                                }
+                                Lbl("The web", Modifier.padding(start = 8.dp, top = 6.dp, bottom = 2.dp), size = 12.sp, color = pal.sub)
                                 SearchOut("travel_explore", "Search the web for “${q.trim()}”", corners(18.dp, 18.dp, 5.dp, 5.dp)) {
                                     Actions.webSearch(ctx, q.trim()); ui.close()
                                 }
@@ -369,3 +396,53 @@ fun Modifier.sheetDrag(ui: Ui, heightPx: Float): Modifier = pointerInput(Unit) {
 
 private fun letterOf(label: String): Char = label.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.let { if (it.isDigit()) '#' else it } ?: '#'
 private fun initialsOf(s: String) = s.split(' ', '-', '_').filter { it.isNotEmpty() }.joinToString("") { it.take(1) }
+
+/** The answer to a sum or a conversion, big, tap to copy. */
+@Composable
+private fun CalcCard(a: Answer) {
+    val pal = LocalPal.current
+    val ctx = LocalContext.current
+    val (top, result) = when (a) {
+        is Answer.Calc -> a.expr to a.value
+        is Answer.Convert -> a.from to a.to
+        else -> return
+    }
+    Piece(
+        Modifier.fillMaxWidth().padding(top = 4.dp),
+        RoundedCornerShape(20.dp),
+        mix(pal.l3, pal.acc, 0.12f),
+        edge = true,
+        onClick = { Search.copy(ctx, result.substringBefore(' ')) },
+    ) {
+        Row(Modifier.padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Lbl(top, size = 13.sp, color = pal.sub)
+                Title("= $result", size = 26.sp)
+            }
+            Glyph("content_copy", size = 18.dp, color = pal.sub)
+        }
+    }
+}
+
+@Composable
+private fun ContactRow(c: Answer.Contact, first: Boolean, last: Boolean, onDone: () -> Unit) {
+    val pal = LocalPal.current
+    val ctx = LocalContext.current
+    val shape = corners(if (first) 18.dp else 5.dp, if (first) 18.dp else 5.dp, if (last) 18.dp else 5.dp, if (last) 18.dp else 5.dp)
+    Piece(Modifier.fillMaxWidth().height(58.dp), shape, pal.l3, edge = true, onClick = { Search.openContact(ctx, c); onDone() }) {
+        Row(Modifier.fillMaxSize().padding(start = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(36.dp).clip(RoundedCornerShape(18.dp)).background(pal.sec), contentAlignment = Alignment.Center) {
+                Title(c.name.take(1).uppercase(), size = 16.sp, color = pal.acc)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Lbl(c.name, weight = FontWeight.SemiBold)
+                c.number?.let { Lbl(it, size = 12.sp, color = pal.sub) }
+            }
+            if (c.number != null) {
+                IconButton("chat", 38.dp, pal.fg) { Search.text(ctx, c); onDone() }
+                IconButton("call", 38.dp, pal.acc) { Search.call(ctx, c); onDone() }
+            }
+        }
+    }
+}

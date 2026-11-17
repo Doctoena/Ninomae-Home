@@ -6,11 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -32,7 +28,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.PlatformTextStyle
@@ -126,12 +121,21 @@ fun Piece(
 fun Modifier.press(onLong: (() -> Unit)? = null, onTap: () -> Unit): Modifier =
     combinedClickable(onClick = onTap, onLongClick = onLong)
 
+/** Themed icons on or off, read wherever icons are drawn. */
+val LocalThemedIcons = androidx.compose.runtime.staticCompositionLocalOf { false }
+
 @Composable
 fun AppIcon(app: AppEntry?, size: Dp, modifier: Modifier = Modifier) {
-    if (app == null) {
-        Box(modifier.size(size).clip(RoundedCornerShape(size * 0.3f)).background(LocalPal.current.l5))
-    } else {
-        Image(app.icon, app.label, modifier.size(size))
+    val pal = LocalPal.current
+    when {
+        app == null -> Box(modifier.size(size).clip(RoundedCornerShape(size * 0.3f)).background(pal.l5))
+        LocalThemedIcons.current && app.mono != null -> Box(
+            modifier.size(size).clip(RoundedCornerShape(size * 0.3f)).background(mix(pal.l4, pal.acc, 0.16f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(app.mono, app.label, Modifier.size(size * 0.86f), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(pal.acc))
+        }
+        else -> Image(app.icon, app.label, modifier.size(size))
     }
 }
 
@@ -245,30 +249,6 @@ fun MiniSwitch(on: Boolean, onClick: () -> Unit) {
                 .clip(CircleShape)
                 .background(if (on) pal.ink else pal.sub),
         )
-    }
-}
-
-@Composable
-fun SlimSlider(value: Float, modifier: Modifier = Modifier, enabled: Boolean = true, onChange: (Float) -> Unit) {
-    val pal = LocalPal.current
-    val change by rememberUpdatedState(onChange)
-    BoxWithConstraints(
-        modifier
-            .height(28.dp)
-            .alpha(if (enabled) 1f else 0.4f)
-            .pointerInput(enabled) {
-                if (enabled) detectTapGestures { change((it.x / size.width).coerceIn(0f, 1f)) }
-            }
-            .pointerInput(enabled) {
-                if (enabled) detectHorizontalDragGestures { c, _ -> change((c.position.x / size.width).coerceIn(0f, 1f)) }
-            },
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        val w = maxWidth
-        val v = value.coerceIn(0f, 1f)
-        Box(Modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(pal.line))
-        Box(Modifier.width(w * v).height(4.dp).clip(CircleShape).background(pal.acc))
-        Box(Modifier.offset(x = (w * v - 2.dp).coerceAtLeast(0.dp)).size(4.dp, 16.dp).clip(CircleShape).background(pal.acc))
     }
 }
 

@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -221,7 +222,12 @@ private fun ThickBar(value: Float, glyph: String, label: String, enabled: Boolea
     }
 }
 
-private fun Modifier.slideToSet(onChange: (Float) -> Unit): Modifier = pointerInput(Unit) {
+private fun Modifier.slideToSet(onChange: (Float) -> Unit): Modifier = composed {
+    val change by rememberUpdatedState(onChange)
+    slideToSetRaw { change(it) }
+}
+
+private fun Modifier.slideToSetRaw(onChange: (Float) -> Unit): Modifier = pointerInput(Unit) {
     awaitPointerEventScope {
         while (true) {
             val e = awaitPointerEvent()
@@ -355,6 +361,7 @@ private fun NoteCard(st: HomeState, ui: Ui, n: Note, count: Int, open: Boolean, 
 /** Swipe sideways to throw it away; let go early and it springs back. */
 @Composable
 fun SwipeAway(onGone: () -> Unit, content: @Composable () -> Unit) {
+    val gone by rememberUpdatedState(onGone)
     val x = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     var w by remember { mutableStateOf(1f) }
@@ -371,7 +378,7 @@ fun SwipeAway(onGone: () -> Unit, content: @Composable () -> Unit) {
                         scope.launch {
                             if (abs(x.value) > w * 0.35f) {
                                 x.animateTo(if (x.value > 0) w * 1.2f else -w * 1.2f, spring(stiffness = 500f))
-                                onGone()
+                                gone()
                             } else {
                                 x.animateTo(0f, spring(dampingRatio = 0.7f, stiffness = 600f))
                             }

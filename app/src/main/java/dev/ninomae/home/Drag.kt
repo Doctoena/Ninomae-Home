@@ -57,7 +57,7 @@ fun Modifier.dragTracker(st: HomeState, ui: Ui): Modifier = pointerInput(Unit) {
             val h = ui.hold ?: continue
             val c = ev.changes.firstOrNull() ?: continue
             if (c.pressed) {
-                if (ui.drag == null && (c.position - h.start).getDistance() > viewConfiguration.touchSlop * 0.5f) {
+                if (ui.drag == null && !st.locked && (c.position - h.start).getDistance() > viewConfiguration.touchSlop * 0.5f) {
                     ui.beginDrag(c.position)
                 }
                 if (ui.drag != null) {
@@ -128,8 +128,15 @@ private fun performDrop(st: HomeState, ui: Ui) {
     val under = cellUnderFinger(ui) ?: return
     val (x, y) = dropCell(ui, w, h) ?: return
 
-    // Onto an app or folder: make or grow a folder.
     val target = st.itemAt(screen, page, under.first, under.second, ignore = src.item?.id)
+
+    // A widget onto a widget: stack them.
+    if (src.item != null && src.item.isWidget && target != null && target.isWidget) {
+        st.stackInto(target, src.item)
+        return
+    }
+
+    // Onto an app or folder: make or grow a folder.
     if (target != null && key != null && (src.item == null || src.item.type == "app") &&
         (target.type == "folder" || (target.type == "app" && target.app != key))
     ) {

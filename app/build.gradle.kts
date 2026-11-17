@@ -11,8 +11,8 @@ android {
         applicationId = "dev.ninomae.home"
         minSdk = 31 // wallpaper colours (Material You)
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
     }
 
     buildTypes {

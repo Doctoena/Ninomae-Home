@@ -157,7 +157,7 @@ private fun PlayerPiece(ui: Ui, modifier: Modifier) {
     val media by Media.now.collectAsState()
     val m = media ?: return
     val pal = LocalPal.current
-    Piece(modifier.height(36.dp).width(236.dp).clickable { ui.toggle(Layer.Sidebar) }) {
+    Piece(modifier.height(36.dp).width(236.dp).clickable { ui.toggle(Layer.Deck) }) {
         Row(
             Modifier.fillMaxHeight().padding(start = 5.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -179,7 +179,7 @@ private fun StatusPieces(st: HomeState, ui: Ui, modifier: Modifier, withClock: B
     val notes by NotifService.notes.collectAsState()
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Piece(
-            Modifier.height(36.dp).clickable { ui.toggle(Layer.Sidebar) },
+            Modifier.height(36.dp).clickable { ui.toggle(Layer.Deck) },
             corners(Rad.container, Rad.joined, Rad.joined, Rad.container),
         ) {
             Row(
@@ -195,7 +195,7 @@ private fun StatusPieces(st: HomeState, ui: Ui, modifier: Modifier, withClock: B
             }
         }
         Piece(
-            Modifier.size(36.dp).clickable { ui.toggle(Layer.Sidebar) },
+            Modifier.size(36.dp).clickable { ui.toggle(Layer.Deck) },
             if (withClock) RoundedCornerShape(Rad.joined) else corners(Rad.joined, Rad.container, Rad.container, Rad.joined),
         ) {
             Glyph("notifications", Modifier.align(Alignment.Center), size = 19.dp, fill = notes.isNotEmpty())

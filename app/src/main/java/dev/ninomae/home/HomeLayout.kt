@@ -1,6 +1,8 @@
 package dev.ninomae.home
 
 import android.content.SharedPreferences
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -26,12 +28,29 @@ data class HomeItem(
     val pkg: String = "",
     val userSerial: Long = 0,
 ) {
-    val resizable get() = type == "widget" || type == "nwidget"
+    val resizable get() = type == "widget" || type == "nwidget" || type == "stack" || type == "folder"
+    val isWidget get() = type == "widget" || type == "nwidget" || type == "stack"
+
+    /** A stack's widgets: "w:<id>" for Android widgets, "n:<kind>" for Ninomae's. */
+    val stackParts: List<String>
+        get() = when (type) {
+            "stack" -> apps
+            "widget" -> listOf("w:$widgetId")
+            "nwidget" -> listOf("n:$kind")
+            else -> emptyList()
+        }
 }
 
-/** Grid size per screen: the inner screen is a desktop, the cover a phone. */
-fun gridCols(screen: Int) = if (screen == 0) 8 else 4
-fun gridRows(screen: Int) = if (screen == 0) 5 else 6
+/** Grid size per screen (settings): the inner screen is a desktop, the cover a phone. */
+object GridSize {
+    var innerCols by androidx.compose.runtime.mutableIntStateOf(8)
+    var innerRows by androidx.compose.runtime.mutableIntStateOf(5)
+    var coverCols by androidx.compose.runtime.mutableIntStateOf(4)
+    var coverRows by androidx.compose.runtime.mutableIntStateOf(6)
+}
+
+fun gridCols(screen: Int) = if (screen == 0) GridSize.innerCols else GridSize.coverCols
+fun gridRows(screen: Int) = if (screen == 0) GridSize.innerRows else GridSize.coverRows
 
 fun loadHome(prefs: SharedPreferences): List<HomeItem> = runCatching {
     val a = JSONArray(prefs.getString("homeItems", "[]")!!)
@@ -128,8 +147,49 @@ fun HomeState.placeAt(screen: Int, page: Int, x: Int, y: Int, item: HomeItem) {
 
 fun HomeState.removeItem(id: String) {
     val item = home.firstOrNull { it.id == id } ?: return
-    if (item.type == "widget") AppWidgets.delete(item.widgetId)
+    item.stackParts.filter { it.startsWith("w:") }.forEach { AppWidgets.delete(it.drop(2).toIntOrNull() ?: 0) }
     commit(home.filter { it.id != id })
+}
+
+/** Drop one widget onto another: they become a stack you swipe through, at the target's size. */
+fun HomeState.stackInto(target: HomeItem, src: HomeItem) {
+    val parts = (target.stackParts + src.stackParts).distinct()
+    val stack = target.copy(type = "stack", apps = parts, widgetId = 0, kind = "")
+    commit(home.filter { it.id != src.id && it.id != target.id } + stack)
+}
+
+/** Take one widget back out of a stack, into the first free space. */
+fun HomeState.unstack(stackId: String, part: String) {
+    val s = home.firstOrNull { it.id == stackId } ?: return
+    val left = s.apps - part
+    fun single(p: String, base: HomeItem) = if (p.startsWith("w:"))
+        base.copy(type = "widget", widgetId = p.drop(2).toIntOrNull() ?: 0, kind = "", apps = emptyList())
+    else base.copy(type = "nwidget", kind = p.drop(2), widgetId = 0, apps = emptyList())
+    val rest = when (left.size) {
+        0 -> null
+        1 -> single(left.first(), s)
+        else -> s.copy(apps = left)
+    }
+    val others = home.filter { it.id != stackId } + listOfNotNull(rest)
+    home = others
+    val (p, x, y) = firstFree(s.screen, s.w, s.h, s.page)
+    commit(others + single(part, s.copy(id = newId(), page = p, x = x, y = y)))
+}
+
+/** After the grid shrinks, anything that no longer fits moves to the first free space. */
+fun HomeState.reflow() {
+    val kept = mutableListOf<HomeItem>()
+    val moved = mutableListOf<HomeItem>()
+    home.forEach { if (it.x + it.w <= gridCols(it.screen) && it.y + it.h <= gridRows(it.screen)) kept += it else moved += it }
+    if (moved.isEmpty()) return
+    home = kept
+    moved.forEach { m ->
+        val w = m.w.coerceAtMost(gridCols(m.screen))
+        val h = m.h.coerceAtMost(gridRows(m.screen))
+        val (p, x, y) = firstFree(m.screen, w, h, m.page)
+        home = home + m.copy(page = p, x = x, y = y, w = w, h = h)
+    }
+    commit(home)
 }
 
 fun HomeState.resize(id: String, dw: Int, dh: Int) {

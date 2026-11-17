@@ -44,6 +44,9 @@ data class AppEntry(
     val icon: ImageBitmap,
     val tint: Color,
     val isGame: Boolean,
+    /** The app's monochrome layer, for themed icons. */
+    val mono: ImageBitmap? = null,
+    val installed: Long = 0,
 )
 
 data class AppPair(val id: String, val name: String, val left: String, val right: String)
@@ -51,7 +54,7 @@ data class AppPair(val id: String, val name: String, val left: String, val right
 /** Everything the home screen shows, kept in Compose state and saved to prefs. */
 class HomeState private constructor(private val ctx: Context) {
     companion object {
-        @Volatile private var inst: HomeState? = null
+        @Volatile internal var inst: HomeState? = null
         fun get(c: Context): HomeState = inst ?: synchronized(this) {
             inst ?: HomeState(c.applicationContext).also { inst = it }
         }
@@ -103,6 +106,21 @@ class HomeState private constructor(private val ctx: Context) {
         private set
     var doubleTapLock by mutableStateOf(prefs.getBoolean("doubleTapLock", true))
         private set
+    var searchContacts by mutableStateOf(prefs.getBoolean("searchContacts", true))
+        private set
+    /** Locked: nothing on the home screen moves until it's unlocked. */
+    var locked by mutableStateOf(prefs.getBoolean("locked", false))
+        private set
+    var glanceCalendar by mutableStateOf(prefs.getBoolean("glanceCalendar", true))
+        private set
+    /** Off until asked for: it sends a rough location to Open-Meteo. */
+    var glanceWeather by mutableStateOf(prefs.getBoolean("glanceWeather", false))
+        private set
+    /** 0 Samsung's palette, 1 the wallpaper (or the swatch when Android won't share it), 2 the swatch. */
+    var colourSource by mutableIntStateOf(prefs.getInt("colourSource", 1))
+        private set
+    var swatch by mutableIntStateOf(prefs.getInt("swatch", 0xFF9B7BC0.toInt()))
+        private set
     /** Ninomae's bar (true) or Samsung's status bar, per screen. The cover is a phone, so Samsung's by default. */
     var barCover by mutableStateOf(prefs.getBoolean("barCover", false))
         private set
@@ -125,6 +143,38 @@ class HomeState private constructor(private val ctx: Context) {
     // ---------- apps ----------
 
     private var callbackSet = false
+    private var loadJob: kotlinx.coroutines.Job? = null
+
+    /** Rendered icons, kept until the app updates or the icon style changes. */
+    private data class Rendered(val stamp: String, val icon: ImageBitmap, val tint: Color, val mono: ImageBitmap?, val installed: Long)
+    private val rendered = HashMap<String, Rendered>()
+
+    init {
+        GridSize.innerCols = prefs.getInt("innerCols", 8)
+        GridSize.innerRows = prefs.getInt("innerRows", 5)
+        GridSize.coverCols = prefs.getInt("coverCols", 4)
+        GridSize.coverRows = prefs.getInt("coverRows", 6)
+    }
+
+    fun updateGrid(screen: Int, cols: Int, rows: Int) {
+        if (screen == 0) { GridSize.innerCols = cols; GridSize.innerRows = rows } else { GridSize.coverCols = cols; GridSize.coverRows = rows }
+        prefs.edit().putInt(if (screen == 0) "innerCols" else "coverCols", cols).putInt(if (screen == 0) "innerRows" else "coverRows", rows).apply()
+        reflow()
+    }
+
+    /** 0 the app's own, 1 themed (monochrome in your colours). */
+    var iconStyle by mutableIntStateOf(prefs.getInt("iconStyle", 0))
+        private set
+    var iconPack by mutableStateOf(prefs.getString("iconPack", null))
+        private set
+
+    fun updateIcons(style: Int, pack: String?) {
+        iconStyle = style
+        iconPack = pack
+        prefs.edit().putInt("iconStyle", style).putString("iconPack", pack).apply()
+        rendered.clear()
+        load()
+    }
 
     fun load() {
         if (!callbackSet) {
@@ -137,7 +187,11 @@ class HomeState private constructor(private val ctx: Context) {
                 override fun onPackagesUnavailable(p: Array<out String>?, u: UserHandle?, r: Boolean) = load()
             }, Handler(Looper.getMainLooper()))
         }
-        scope.launch {
+        // Installs and updates arrive in bursts; wait for them to settle, then redo only what changed.
+        val first = apps.isEmpty()
+        loadJob?.cancel()
+        loadJob = scope.launch {
+            if (!first) kotlinx.coroutines.delay(300)
             val list = withContext(Dispatchers.IO) {
                 val px = (64 * ctx.resources.displayMetrics.density).toInt()
                 launcherApps.profiles.flatMap { user ->
@@ -153,9 +207,21 @@ class HomeState private constructor(private val ctx: Context) {
     }
 
     private fun entry(info: LauncherActivityInfo, user: UserHandle, px: Int): AppEntry {
-        val bmp = info.getBadgedIcon(0).toBitmap(px, px, Bitmap.Config.ARGB_8888)
         val serial = users.getSerialNumberForUser(user)
         val key = "${info.componentName.flattenToShortString()}#$serial"
+        val stamp = "${info.applicationInfo.sourceDir}|${iconPack}"
+        val r = rendered[key]?.takeIf { it.stamp == stamp } ?: run {
+            val own = info.getIcon(0)
+            val packed = Icons.fromPack(ctx, iconPack, info.componentName)
+            val base = packed ?: own
+            val drawn = (if (user == android.os.Process.myUserHandle()) base else ctx.packageManager.getUserBadgedIcon(base, user))
+                .toBitmap(px, px, Bitmap.Config.ARGB_8888)
+            val installed = runCatching { ctx.packageManager.getPackageInfo(info.componentName.packageName, 0).firstInstallTime }.getOrDefault(0L)
+            // Samsung hands launchers flattened icons; the app's own resource still has its monochrome layer.
+            val mono = Icons.monochrome(own, px) ?: Icons.rawIcon(ctx, info)?.let { Icons.monochrome(it, px) }
+            Rendered(stamp, drawn.asImageBitmap(), averageColour(drawn), mono?.asImageBitmap(), installed)
+                .also { rendered[key] = it }
+        }
         return AppEntry(
             key = key,
             label = renames[key] ?: info.label.toString(),
@@ -163,9 +229,11 @@ class HomeState private constructor(private val ctx: Context) {
             pkg = info.componentName.packageName,
             component = info.componentName,
             user = user,
-            icon = bmp.asImageBitmap(),
-            tint = averageColour(bmp),
+            icon = r.icon,
+            tint = r.tint,
             isGame = info.applicationInfo.category == ApplicationInfo.CATEGORY_GAME,
+            mono = r.mono,
+            installed = r.installed,
         )
     }
 
@@ -247,6 +315,51 @@ class HomeState private constructor(private val ctx: Context) {
         if (cover) barCover = own else barInner = own
         prefs.edit().putBoolean(if (cover) "barCover" else "barInner", own).apply()
     }
+
+    fun updateGlance(calendar: Boolean, weather: Boolean) {
+        glanceCalendar = calendar
+        glanceWeather = weather
+        prefs.edit().putBoolean("glanceCalendar", calendar).putBoolean("glanceWeather", weather).apply()
+        if (!weather) Glance.forgetWeather()
+        Glance.refresh(ctx, this)
+    }
+
+    // ---------- backup ----------
+
+    /** Everything you've set up, as JSON. Widgets come back only on this phone (their ids are local). */
+    fun exportJson(): String {
+        val o = JSONObject().put("ninomaeHome", 1)
+        prefs.all.forEach { (k, v) ->
+            when (v) {
+                is Boolean, is Int, is Long, is Float, is String -> o.put(k, JSONObject().put("t", v.javaClass.simpleName).put("v", v))
+            }
+        }
+        return o.toString(2)
+    }
+
+    fun importJson(text: String): Boolean = runCatching {
+        val o = JSONObject(text)
+        require(o.has("ninomaeHome"))
+        val e = prefs.edit().clear()
+        o.keys().forEach { k ->
+            val item = o.optJSONObject(k) ?: return@forEach
+            when (item.getString("t")) {
+                "Boolean" -> e.putBoolean(k, item.getBoolean("v"))
+                "Integer" -> e.putInt(k, item.getInt("v"))
+                "Long" -> e.putLong(k, item.getLong("v"))
+                "Float" -> e.putFloat(k, item.getDouble("v").toFloat())
+                "String" -> e.putString(k, item.getString("v"))
+            }
+        }
+        e.commit()
+        inst = null
+        true
+    }.getOrDefault(false)
+
+    fun updateSearchContacts(v: Boolean) { searchContacts = v; prefs.edit().putBoolean("searchContacts", v).apply() }
+    fun updateLocked(v: Boolean) { locked = v; prefs.edit().putBoolean("locked", v).apply() }
+    fun updateColourSource(v: Int) { colourSource = v; prefs.edit().putInt("colourSource", v).apply() }
+    fun updateSwatch(v: Int) { swatch = v; prefs.edit().putInt("swatch", v).apply() }
 
     fun updateDoubleTapLock(v: Boolean) { doubleTapLock = v; prefs.edit().putBoolean("doubleTapLock", v).apply() }
 

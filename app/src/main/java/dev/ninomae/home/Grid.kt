@@ -149,7 +149,10 @@ private fun Modifier.desktopGestures(st: HomeState, ui: Ui): Modifier = composed
         .pointerInput(Unit) {
             detectTapGestures(
                 onDoubleTap = { if (st.doubleTapLock && !ui.editing) Actions.global(ctx, AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN) },
-                onLongPress = { ui.editing = true },
+                onLongPress = {
+                    if (st.locked) android.widget.Toast.makeText(ctx, "The home screen is locked. Unlock it in settings.", android.widget.Toast.LENGTH_SHORT).show()
+                    else ui.editing = true
+                },
                 onTap = { if (ui.editing) ui.editing = false },
             )
         }
@@ -224,7 +227,7 @@ private fun ItemView(st: HomeState, ui: Ui, item: HomeItem, cw: Dp, ch: Dp, badg
                     ),
                 ) { AppIcon(app, 56.dp) }
             }
-            "folder" -> HomeIcon(
+            "folder" -> if (item.w >= 2 && item.h >= 2) BigFolder(st, ui, item, badged, hold) else HomeIcon(
                 st, item.name.ifBlank { "Folder" },
                 st.dots && item.apps.any { st.app(it)?.pkg in badged },
                 Modifier.holdable(onTap = { if (!ui.editing) ui.openFolder(item.id) }, onHold = hold),
@@ -245,6 +248,7 @@ private fun ItemView(st: HomeState, ui: Ui, item: HomeItem, cw: Dp, ch: Dp, badg
             }
             "widget" -> AndroidWidget(item.widgetId, cw.value * item.w - 8, ch.value * item.h - 8, Modifier.clip(RoundedCornerShape(Rad.normal)))
             "nwidget" -> NinomaeWidget(st, ui, item.kind)
+            "stack" -> WidgetStack(st, ui, item, cw.value * item.w - 8, ch.value * item.h - 8)
         }
         if (ui.editing) EditOverlay(st, ui, item, hold)
     }
@@ -315,7 +319,10 @@ private fun EditOverlay(st: HomeState, ui: Ui, item: HomeItem, hold: (Offset) ->
                     .background(pal.acc.copy(alpha = 0.08f))
                     .holdable(onTap = {}, onHold = hold),
             )
-            Row(
+            if (item.w == 1 && item.h == 1) {
+                // One cell has no room for four arrows: one button makes it big.
+                EditButton("open_in_full", Modifier.align(Alignment.BottomEnd).padding(4.dp)) { st.resize(item.id, 1, 1) }
+            } else Row(
                 Modifier.align(Alignment.BottomEnd).padding(6.dp),
                 horizontalArrangement = Arrangement.spacedBy(3.dp),
             ) {
@@ -323,6 +330,12 @@ private fun EditOverlay(st: HomeState, ui: Ui, item: HomeItem, hold: (Offset) ->
                 EditButton("keyboard_arrow_right") { st.resize(item.id, 1, 0) }
                 EditButton("keyboard_arrow_up") { st.resize(item.id, 0, -1) }
                 EditButton("keyboard_arrow_down") { st.resize(item.id, 0, 1) }
+                if (item.type == "stack") {
+                    EditButton("layers_clear") {
+                        val i = (ui.stackPage[item.id] ?: 0).coerceIn(0, item.apps.lastIndex)
+                        st.unstack(item.id, item.apps[i])
+                    }
+                }
             }
         }
         EditButton("close", Modifier.align(Alignment.TopEnd).offset(4.dp, (-4).dp)) { st.removeItem(item.id) }
@@ -359,11 +372,22 @@ private fun DropHint(st: HomeState, ui: Ui, cw: Dp, ch: Dp) {
     val under = cellUnderFinger(ui) ?: return
     val key = src.appKey ?: src.item?.takeIf { it.type == "app" }?.app
     val target = st.itemAt(ui.screen, ui.page, under.first, under.second, ignore = src.item?.id)
-    if (target != null && key != null && (target.type == "folder" || target.type == "app")) {
+    val stacking = src.item?.isWidget == true && target?.isWidget == true
+    if (target != null && (stacking || (key != null && (target.type == "folder" || target.type == "app")))) {
         Box(
-            Modifier.offset(cw * target.x, ch * target.y).size(cw, ch).padding(6.dp)
+            Modifier.offset(cw * target.x, ch * target.y).size(cw * target.w, ch * target.h).padding(4.dp)
+                .clip(RoundedCornerShape(Rad.normal)).background(pal.acc.copy(alpha = 0.12f))
                 .border(2.dp, pal.acc, RoundedCornerShape(Rad.normal)),
-        )
+            contentAlignment = Alignment.Center,
+        ) {
+            if (stacking) Piece(Modifier.height(32.dp), RoundedCornerShape(Rad.segment), pal.acc) {
+                Row(Modifier.padding(horizontal = 12.dp).align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
+                    Glyph("layers", size = 17.dp, color = pal.ink)
+                    Spacer(Modifier.width(6.dp))
+                    Lbl("Stack", size = 13.sp, color = pal.ink, weight = FontWeight.SemiBold)
+                }
+            }
+        }
         return
     }
     val (x, y) = dropCell(ui, w, h) ?: return
@@ -398,7 +422,7 @@ fun NinomaeWidget(st: HomeState, ui: Ui, kind: String) {
     val all = RoundedCornerShape(Rad.normal)
     when (kind) {
         "stack" -> Widgets(st, ui, Modifier.fillMaxWidth())
-        "greeting" -> Greeting(st, all, Modifier.clickable { ui.toggle(Layer.Sidebar) })
+        "greeting" -> Greeting(st, all, Modifier.clickable { ui.toggle(Layer.Deck) })
         "player" -> media?.let { PlayerCard(it, all) } ?: if (!ui.editing) Unit else Piece(Modifier.fillMaxWidth().height(98.dp), all) {
             Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Cover(null, 68.dp)
@@ -423,10 +447,91 @@ fun NinomaeWidget(st: HomeState, ui: Ui, kind: String) {
                     clockText(now),
                     style = TextStyle(color = Color.White, fontSize = 64.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black, shadow = shadow),
                 )
+                val w = Glance.weather
                 BasicText(
-                    now.format(DateTimeFormatter.ofPattern("EEEE d MMMM")),
+                    now.format(DateTimeFormatter.ofPattern("EEEE d MMMM")) + (w?.let { "  ·  ${it.temp} ${it.text}" } ?: ""),
                     style = TextStyle(color = Color.White, fontSize = 16.sp, fontFamily = Sans, fontWeight = FontWeight.Medium, shadow = shadow),
                 )
+                Glance.event?.let { e ->
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        Modifier.clip(RoundedCornerShape(Rad.segment)).background(Color.Black.copy(alpha = 0.32f)).padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Glyph("event", size = 16.dp, color = Color.White)
+                        Spacer(Modifier.width(6.dp))
+                        Lbl("${e.title}  ·  ${e.whenText}", size = 13.sp, color = Color.White, weight = FontWeight.Medium)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Several widgets in one spot: swipe up and down through them, dots show which. */
+@Composable
+private fun WidgetStack(st: HomeState, ui: Ui, item: HomeItem, wDp: Float, hDp: Float) {
+    val pal = LocalPal.current
+    val pager = androidx.compose.foundation.pager.rememberPagerState(pageCount = { item.apps.size })
+    LaunchedEffect(pager.currentPage) { ui.stackPage[item.id] = pager.currentPage }
+    Box(Modifier.fillMaxSize()) {
+        androidx.compose.foundation.pager.VerticalPager(pager, Modifier.fillMaxSize().clip(RoundedCornerShape(Rad.normal)), userScrollEnabled = !ui.editing) { i ->
+            val part = item.apps[i]
+            Box(Modifier.fillMaxSize()) {
+                if (part.startsWith("w:")) AndroidWidget(part.drop(2).toIntOrNull() ?: 0, wDp, hDp, Modifier.clip(RoundedCornerShape(Rad.normal)))
+                else NinomaeWidget(st, ui, part.drop(2))
+            }
+        }
+        Column(
+            Modifier.align(Alignment.CenterEnd).padding(end = 3.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            repeat(item.apps.size) { i ->
+                val h by animateDpAsState(if (i == pager.currentPage) 14.dp else 5.dp, label = "sd")
+                Box(Modifier.size(5.dp, h).clip(CircleShape).background(if (i == pager.currentPage) pal.acc else Color.White.copy(alpha = 0.5f)))
+            }
+        }
+    }
+}
+
+/** A folder big enough to show its apps: tap them straight from the home screen. */
+@Composable
+private fun BigFolder(st: HomeState, ui: Ui, item: HomeItem, badged: Set<String>, hold: (Offset) -> Unit) {
+    val pal = LocalPal.current
+    val ctx = LocalContext.current
+    Piece(Modifier.fillMaxSize(), RoundedCornerShape(Rad.normal + 3.dp), pal.l3.copy(alpha = 0.9f), edge = true) {
+        Column(Modifier.fillMaxSize().padding(10.dp)) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(Rad.segment))
+                    .holdable(onTap = { if (!ui.editing) ui.openFolder(item.id) }, onHold = hold).padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Title(item.name.ifBlank { "Folder" }, Modifier.weight(1f), size = 14.sp)
+                Glyph("open_in_full", size = 15.dp, color = pal.sub)
+            }
+            Spacer(Modifier.height(6.dp))
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val cols = (maxWidth / 64.dp).toInt().coerceAtLeast(2)
+                val rows = (maxHeight / 72.dp).toInt().coerceAtLeast(1)
+                val shown = item.apps.take(cols * rows)
+                Column(verticalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxSize()) {
+                    shown.chunked(cols).forEach { line ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            line.forEach { k ->
+                                val app = st.app(k)
+                                Box(
+                                    Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).pressScale()
+                                        .holdable(onTap = { if (!ui.editing && app != null) Actions.open(ctx, st, app) }, onHold = hold),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    AppIcon(app, 48.dp)
+                                    if (st.dots && app?.pkg in badged) Badge(Modifier.align(Alignment.TopEnd), 12.dp)
+                                }
+                            }
+                            repeat(cols - line.size) { Spacer(Modifier.size(56.dp)) }
+                        }
+                    }
+                }
             }
         }
     }

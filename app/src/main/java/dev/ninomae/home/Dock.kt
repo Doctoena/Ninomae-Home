@@ -87,11 +87,11 @@ fun Dock(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
         Piece(
             Modifier.size(62.dp, 66.dp),
             corners(j, big, big, j),
-            color = if (ui.layer == Layer.Drawer) pal.l5 else pal.l3,
+            color = if (ui.layer == Layer.Apps) pal.l5 else pal.l3,
             edge = true,
-            onClick = { ui.toggle(Layer.Drawer) },
+            onClick = { ui.toggle(Layer.Apps) },
         ) {
-            Glyph("apps", Modifier.align(Alignment.Center), size = 24.dp, color = if (ui.layer == Layer.Drawer) pal.acc else pal.fg)
+            Glyph("apps", Modifier.align(Alignment.Center), size = 24.dp, color = if (ui.layer == Layer.Apps) pal.acc else pal.fg)
         }
     }
 }

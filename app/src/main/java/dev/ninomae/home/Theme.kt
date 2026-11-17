@@ -12,6 +12,14 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import android.app.WallpaperManager
+import android.os.Handler
+import android.os.Looper
+import androidx.core.graphics.ColorUtils
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
@@ -60,12 +68,74 @@ private fun palOf(s: ColorScheme, dark: Boolean) = Pal(
 )
 
 @Composable
-fun NinomaeTheme(content: @Composable () -> Unit) {
+fun NinomaeTheme(source: Int, swatch: Int, content: @Composable () -> Unit) {
     val ctx = LocalContext.current
     val dark = isSystemInDarkTheme()
-    val scheme = if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
-    val pal = remember(scheme, dark) { palOf(scheme, dark) }
+    // 1: the wallpaper's colour when Android shares it, otherwise the swatch; 2: the swatch; 0: Samsung's palette.
+    val wall = if (source == 1) rememberWallpaperSeed() else null
+    val seed = when (source) { 1 -> wall ?: swatch; 2 -> swatch; else -> null }
+    val pal = if (seed != null) remember(seed, dark) { palFromSeed(seed, dark) } else {
+        val scheme = if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
+        remember(scheme, dark) { palOf(scheme, dark) }
+    }
     CompositionLocalProvider(LocalPal provides pal, content = content)
+}
+
+/** The wallpaper's most colourful main colour, refreshed when the wallpaper changes. */
+@Composable
+private fun rememberWallpaperSeed(): Int? {
+    val ctx = LocalContext.current
+    val wm = remember { WallpaperManager.getInstance(ctx) }
+    var seed by remember { mutableStateOf(pickSeed(wm)) }
+    DisposableEffect(Unit) {
+        val l = WallpaperManager.OnColorsChangedListener { _, which ->
+            if (which and WallpaperManager.FLAG_SYSTEM != 0) seed = pickSeed(wm)
+        }
+        wm.addOnColorsChangedListener(l, Handler(Looper.getMainLooper()))
+        onDispose { wm.removeOnColorsChangedListener(l) }
+    }
+    return seed
+}
+
+/** Whether Android shares this wallpaper's colours with apps at all. */
+fun wallpaperSeed(ctx: android.content.Context): Int? = pickSeed(WallpaperManager.getInstance(ctx))
+
+/** Seeds to choose from when the wallpaper's own colours aren't available. Plum is the desktop shell's. */
+val swatches = listOf(
+    0xFF9B7BC0.toInt() to "Plum",
+    0xFFB8574A.toInt() to "Oni",
+    0xFFC4708F.toInt() to "Rose",
+    0xFFC08A3E.toInt() to "Amber",
+    0xFF3E9C93.toInt() to "Teal",
+    0xFF5B7FC4.toInt() to "Blue",
+)
+
+private fun pickSeed(wm: WallpaperManager): Int? {
+    val c = runCatching { wm.getWallpaperColors(WallpaperManager.FLAG_SYSTEM) ?: wm.getWallpaperColors(WallpaperManager.FLAG_LOCK) }
+        .getOrNull() ?: return null
+    return listOfNotNull(c.primaryColor, c.secondaryColor, c.tertiaryColor)
+        .map { it.toArgb() }
+        .maxByOrNull { val hsl = FloatArray(3); ColorUtils.colorToHSL(it, hsl); hsl[1] * (1f - kotlin.math.abs(hsl[2] - 0.5f)) }
+}
+
+/**
+ * A palette in the shell's style from one colour: the hue kept, surfaces barely tinted,
+ * a soft accent. Close to what matugen gives the desktop for the same wallpaper.
+ */
+private fun palFromSeed(seed: Int, dark: Boolean): Pal {
+    val hsl = FloatArray(3)
+    ColorUtils.colorToHSL(seed, hsl)
+    val h = hsl[0]
+    fun c(s: Float, l: Float) = Color(ColorUtils.HSLToColor(floatArrayOf(h, s, l)))
+    return if (dark) Pal(
+        l0 = c(0.10f, 0.07f), l1 = c(0.10f, 0.09f), l3 = c(0.11f, 0.12f), l4 = c(0.11f, 0.145f), l5 = c(0.10f, 0.18f),
+        fg = c(0.20f, 0.92f), sub = c(0.10f, 0.74f), dim = c(0.06f, 0.52f), line = c(0.08f, 0.30f),
+        acc = c(0.55f, 0.82f), ink = c(0.40f, 0.24f), sec = c(0.24f, 0.30f), dark = true,
+    ) else Pal(
+        l0 = c(0.30f, 0.97f), l1 = c(0.28f, 0.95f), l3 = c(0.26f, 0.92f), l4 = c(0.24f, 0.89f), l5 = c(0.22f, 0.86f),
+        fg = c(0.20f, 0.11f), sub = c(0.10f, 0.32f), dim = c(0.06f, 0.50f), line = c(0.10f, 0.78f),
+        acc = c(0.50f, 0.42f), ink = c(0.40f, 0.97f), sec = c(0.35f, 0.86f), dark = false,
+    )
 }
 
 /** Corner radii by control size, as in the shell (Appearance.rounding). */

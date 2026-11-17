@@ -8,6 +8,11 @@ An Android home screen for the Galaxy Z Fold 7 in the Ninomae shell's look: roun
 - **Shortcuts** in the hold menu, and other apps can add shortcuts to the home screen.
 - **Notification dots**, **hide** and **rename** apps, web and Play Store search from the drawer.
 - **Gestures**: swipe up for all apps, swipe down for the sidebar or Samsung's panel, double-tap to lock.
+- **Search that answers**: sums (12*7, 15% of 80), conversions (5 km to mi, 70 f in c), contacts (call or text), Android settings pages, the web and the Play Store.
+- **At a glance**: your next calendar event, and the weather if you turn it on (Open-Meteo, rough location only), under the clock.
+- **Look**: colours from the wallpaper or a swatch (Android won't share every wallpaper's colours), themed icons, icon packs.
+- **Widget stacks** (drop a widget on a widget) and **big folders** (resize a folder to tap its apps directly).
+- **Grid sizes** per screen, **lock the layout**, **backup and restore** to a file.
 - **Bar** in place of the status bar: app pairs on the left, the player in the middle, status and clock on the right.
 - **Joined dock**: pinned apps, recent apps, all apps. Hold an app for Open, Split, Window, Pair, Pin, App info and Uninstall.
 - **App drawer**: search, A–Z / Most used / Games, pairs along the top.

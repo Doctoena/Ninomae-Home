@@ -43,7 +43,7 @@ fun Widgets(st: HomeState, ui: Ui, modifier: Modifier) {
     val j = Rad.joined
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         val greetBottom = if (media == null && jump.isEmpty()) big else j
-        Greeting(st, corners(big, big, greetBottom, greetBottom), Modifier.clickable { ui.toggle(Layer.Sidebar) })
+        Greeting(st, corners(big, big, greetBottom, greetBottom), Modifier.clickable { ui.toggle(Layer.Deck) })
         media?.let { PlayerCard(it, corners(j, j, if (jump.isEmpty()) big else j, if (jump.isEmpty()) big else j)) }
         if (jump.isNotEmpty()) JumpBack(st, jump, corners(j, j, big, big))
     }
@@ -70,7 +70,11 @@ fun Greeting(st: HomeState, shape: Shape, modifier: Modifier = Modifier) {
             Column {
                 Title(greeting(now, st.name), size = 19.sp)
                 Lbl(
-                    "${now.format(DateTimeFormatter.ofPattern("EEE d MMM"))}  ·  ${Status.battery}%  ·  ${uptime()}",
+                    listOfNotNull(
+                        now.format(DateTimeFormatter.ofPattern("EEE d MMM")),
+                        Glance.weather?.let { "${it.temp} ${it.text}" },
+                        Glance.event?.let { "${it.title} ${it.whenText}" } ?: "${Status.battery}%",
+                    ).joinToString("  ·  "),
                     size = 13.sp,
                     color = pal.sub,
                 )

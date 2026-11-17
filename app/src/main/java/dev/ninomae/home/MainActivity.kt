@@ -3,6 +3,8 @@ package dev.ninomae.home
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -16,6 +18,28 @@ class MainActivity : ComponentActivity() {
     private val ui = Ui()
     private lateinit var st: HomeState
 
+    private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        ui.permissionTick++
+        Glance.refresh(this, st)
+    }
+
+    private val saveBackup = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        uri ?: return@registerForActivityResult
+        val ok = runCatching { contentResolver.openOutputStream(uri)?.use { it.write(st.exportJson().toByteArray()) } }.isSuccess
+        Toast.makeText(this, if (ok) "Home saved" else "Couldn't save it", Toast.LENGTH_SHORT).show()
+    }
+
+    private val openBackup = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@registerForActivityResult
+        val text = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } }.getOrNull()
+        if (text != null && st.importJson(text)) {
+            Toast.makeText(this, "Home restored", Toast.LENGTH_SHORT).show()
+            recreate()
+        } else {
+            Toast.makeText(this, "That isn't a Ninomae Home backup", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -27,11 +51,16 @@ class MainActivity : ComponentActivity() {
         applyStatusBar()
         st.load()
         AppWidgets.init(this)
+        ui.askPermissions = { permissions.launch(it) }
+        ui.backup = { saveBackup.launch("ninomae-home-${java.time.LocalDate.now()}.json") }
+        ui.restore = { openBackup.launch(arrayOf("application/json", "text/plain", "*/*")) }
         setContent {
-            NinomaeTheme {
+            NinomaeTheme(st.colourSource, st.swatch) {
+              androidx.compose.runtime.CompositionLocalProvider(LocalThemedIcons provides (st.iconStyle == 1)) {
                 // Home never closes on back; back only closes what's open.
                 BackHandler { if (ui.layer != Layer.None) ui.close() else ui.editing = false }
                 Home(st, ui)
+              }
             }
         }
     }
@@ -73,6 +102,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         st.refreshAccess()
         applyStatusBar()
+        Glance.refresh(this, st)
     }
 
     override fun onStop() {
