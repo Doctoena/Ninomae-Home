@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -76,6 +77,17 @@ fun HomeGrid(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
         st.lastScreen = screen
     }
     LaunchedEffect(pager.currentPage) { ui.page = pager.currentPage }
+    // The wallpaper drifts a little as you turn pages.
+    val view = androidx.compose.ui.platform.LocalView.current
+    val ctx = LocalContext.current
+    LaunchedEffect(pages) {
+        val wm = android.app.WallpaperManager.getInstance(ctx)
+        runCatching { wm.setWallpaperOffsetSteps(if (pages > 1) 1f / (pages - 1) else 1f, 1f) }
+        androidx.compose.runtime.snapshotFlow { pager.currentPage + pager.currentPageOffsetFraction }.collect { f ->
+            val x = if (pages > 1) (f / (pages - 1)).coerceIn(0f, 1f) else 0.5f
+            view.windowToken?.let { runCatching { wm.setWallpaperOffsets(it, x, 0.5f) } }
+        }
+    }
     LaunchedEffect(ui.jumpToPage) {
         ui.jumpToPage?.let { pager.animateScrollToPage(it.coerceIn(0, pages - 1)) }
         ui.jumpToPage = null
@@ -133,7 +145,6 @@ fun HomeGrid(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
 /** Empty desktop: swipe up for all apps, swipe down for the sidebar, double-tap to lock, hold to edit. */
 private fun Modifier.desktopGestures(st: HomeState, ui: Ui): Modifier = composed {
     val ctx = LocalContext.current
-    val density = LocalDensity.current
     this
         .pointerInput(Unit) {
             detectTapGestures(
@@ -143,20 +154,36 @@ private fun Modifier.desktopGestures(st: HomeState, ui: Ui): Modifier = composed
             )
         }
         .pointerInput(Unit) {
-            var total = 0f
-            val t = with(density) { 56.dp.toPx() }
+            // Swipe down pulls the deck, swipe up raises the sheet, both under the finger.
+            val vt = androidx.compose.ui.input.pointer.util.VelocityTracker()
+            var mode = 0
             detectVerticalDragGestures(
-                onDragStart = { total = 0f },
+                onDragStart = { vt.resetTracking(); mode = 0 },
                 onDragEnd = {
-                    when {
-                        total < -t -> ui.layer = Layer.Drawer
-                        total > t -> when (st.swipeDown) {
-                            0 -> ui.layer = Layer.Sidebar
-                            1 -> Actions.global(ctx, AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS)
-                        }
+                    val v = vt.calculateVelocity().y
+                    when (mode) {
+                        1 -> ui.settleDeck(v)
+                        -1 -> ui.settleSheet(v)
+                        2 -> Actions.global(ctx, AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS)
                     }
+                    mode = 0
                 },
-            ) { _, dy -> total += dy }
+                onDragCancel = {
+                    when (mode) { 1 -> ui.settleDeck(0f); -1 -> ui.settleSheet(0f) }
+                    mode = 0
+                },
+            ) { c, dy ->
+                vt.addPosition(c.uptimeMillis, c.position)
+                if (mode == 0) {
+                    mode = if (dy < 0) -1 else when (st.swipeDown) { 0 -> 1; 1 -> 2; else -> 3 }
+                    if (mode == 1 || mode == -1) ui.gesturing = true
+                }
+                val travel = ui.screenHpx * 0.5f
+                when (mode) {
+                    1 -> ui.deck = (ui.deck + dy / travel).coerceIn(0f, 1f)
+                    -1 -> ui.sheet = (ui.sheet - dy / travel).coerceIn(0f, 1f)
+                }
+            }
         }
 }
 
@@ -164,6 +191,8 @@ private fun Modifier.desktopGestures(st: HomeState, ui: Ui): Modifier = composed
 private fun ItemView(st: HomeState, ui: Ui, item: HomeItem, cw: Dp, ch: Dp, badged: Set<String>) {
     val ctx = LocalContext.current
     val beingDragged = ui.drag?.src?.item?.id == item.id
+    val held = ui.layer == Layer.Menu && ui.menuHomeId == item.id
+    val lift by androidx.compose.animation.core.animateFloatAsState(if (held) 1f else 0f, androidx.compose.animation.core.spring(0.6f, 500f), label = "lift")
     var rect by remember { mutableStateOf(Rect.Zero) }
     Box(
         Modifier
@@ -171,6 +200,7 @@ private fun ItemView(st: HomeState, ui: Ui, item: HomeItem, cw: Dp, ch: Dp, badg
             .width(cw * item.w)
             .height(ch * item.h)
             .alpha(if (beingDragged) 0f else 1f)
+            .graphicsLayer { val k = 1f + 0.08f * lift; scaleX = k; scaleY = k }
             .padding(4.dp)
             .onGloballyPositioned { rect = it.boundsInRoot() },
     ) {
@@ -178,9 +208,14 @@ private fun ItemView(st: HomeState, ui: Ui, item: HomeItem, cw: Dp, ch: Dp, badg
         when (item.type) {
             "app" -> {
                 val app = st.app(item.app)
+                if (lift > 0.01f) Box(
+                    Modifier.align(Alignment.TopCenter).padding(top = (ch - 92.dp) / 2).size(72.dp)
+                        .graphicsLayer { alpha = lift }.clip(RoundedCornerShape(24.dp))
+                        .background(LocalPal.current.acc.copy(alpha = 0.3f)),
+                )
                 HomeIcon(
                     st, app?.label ?: "Missing", app != null && st.dots && app.pkg in badged,
-                    Modifier.holdable(
+                    Modifier.pressScale().holdable(
                         onTap = { if (!ui.editing && app != null) Actions.open(ctx, st, app) },
                         onHold = { pos ->
                             hold(pos)
@@ -364,7 +399,7 @@ fun NinomaeWidget(st: HomeState, ui: Ui, kind: String) {
     when (kind) {
         "stack" -> Widgets(st, ui, Modifier.fillMaxWidth())
         "greeting" -> Greeting(st, all, Modifier.clickable { ui.toggle(Layer.Sidebar) })
-        "player" -> media?.let { PlayerCard(it, all) } ?: Piece(Modifier.fillMaxWidth().height(98.dp), all) {
+        "player" -> media?.let { PlayerCard(it, all) } ?: if (!ui.editing) Unit else Piece(Modifier.fillMaxWidth().height(98.dp), all) {
             Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Cover(null, 68.dp)
                 Spacer(Modifier.width(12.dp))

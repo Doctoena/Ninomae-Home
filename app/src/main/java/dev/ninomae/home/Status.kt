@@ -32,6 +32,7 @@ object Status {
     var wifi by mutableStateOf(false)
     var bt by mutableStateOf(false)
     var torch by mutableStateOf(false)
+    var location by mutableStateOf(false)
     var dnd by mutableStateOf(false)
     var rotate by mutableStateOf(false)
     var volume by mutableFloatStateOf(0f)
@@ -58,6 +59,7 @@ object Status {
                 BluetoothAdapter.ACTION_STATE_CHANGED -> readBt(c)
                 NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED -> readDnd(c)
                 "android.media.VOLUME_CHANGED_ACTION" -> readVolume(c)
+                android.location.LocationManager.PROVIDERS_CHANGED_ACTION -> readLocation(c)
             }
         }
     }
@@ -87,6 +89,7 @@ object Status {
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
             addAction(NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED)
             addAction("android.media.VOLUME_CHANGED_ACTION")
+            addAction(android.location.LocationManager.PROVIDERS_CHANGED_ACTION)
         }
         ContextCompat.registerReceiver(ctx, receiver, f, ContextCompat.RECEIVER_EXPORTED)
 
@@ -110,7 +113,7 @@ object Status {
             ctx.contentResolver.registerContentObserver(Settings.System.getUriFor(Settings.System.ACCELEROMETER_ROTATION), false, it)
         }
 
-        readBt(ctx); readDnd(ctx); readVolume(ctx); readSettings(ctx)
+        readBt(ctx); readDnd(ctx); readVolume(ctx); readSettings(ctx); readLocation(ctx)
     }
 
     fun stop(ctx: Context) {
@@ -125,6 +128,10 @@ object Status {
 
     private fun readBt(c: Context) {
         bt = runCatching { c.getSystemService(BluetoothManager::class.java).adapter?.isEnabled == true }.getOrDefault(false)
+    }
+
+    private fun readLocation(c: Context) {
+        location = runCatching { c.getSystemService(android.location.LocationManager::class.java).isLocationEnabled }.getOrDefault(false)
     }
 
     private fun readDnd(c: Context) {

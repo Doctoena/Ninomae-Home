@@ -20,6 +20,7 @@ import android.view.accessibility.AccessibilityEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
@@ -67,6 +68,7 @@ data class Note(
     val text: String,
     val time: Long,
     val autoCancel: Boolean,
+    val icon: ImageBitmap?,
     val intent: PendingIntent?,
     val actions: List<Pair<String, PendingIntent>>,
 )
@@ -132,6 +134,16 @@ class NotifService : NotificationListenerService() {
         Media.detach()
     }
 
+    private val icons = HashMap<String, ImageBitmap?>()
+
+    /** The app's own icon, for apps that have none in the launcher (watch managers, system services). */
+    private fun iconFor(pkg: String): ImageBitmap? = icons.getOrPut(pkg) {
+        runCatching {
+            val px = (64 * resources.displayMetrics.density).toInt()
+            packageManager.getApplicationIcon(pkg).toBitmap(px, px).asImageBitmap()
+        }.getOrNull()
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification?) = refresh()
     override fun onNotificationRemoved(sbn: StatusBarNotification?) = refresh()
 
@@ -155,6 +167,7 @@ class NotifService : NotificationListenerService() {
                         ?.toString()?.trim() ?: "",
                     time = sbn.postTime,
                     autoCancel = n.flags and Notification.FLAG_AUTO_CANCEL != 0,
+                    icon = iconFor(sbn.packageName),
                     intent = n.contentIntent,
                     actions = n.actions.orEmpty()
                         .filter { it.remoteInputs.isNullOrEmpty() && it.actionIntent != null && !it.title.isNullOrBlank() }

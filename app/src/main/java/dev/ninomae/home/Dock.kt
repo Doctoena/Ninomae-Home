@@ -36,7 +36,7 @@ fun Dock(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
     val density = LocalDensity.current
     val notes by NotifService.notes.collectAsState()
     val badged = remember(notes) { notes.map { it.pkg }.toSet() }
-    val pinned = st.pinned.mapNotNull { st.app(it) }.let { if (compact) it.take(5) else it.take(9) }
+    val pinned = st.pinned.mapNotNull { st.app(it) }.let { if (compact) it.take(4) else it.take(9) }
     val recents = if (st.dockRecentsOn) st.dockRecents(if (compact) 0 else 3) else emptyList()
     val menuOnDock = ui.layer == Layer.Menu && ui.menuFromDock
     val dropping = ui.drag != null && ui.dockRect.contains(ui.dragPos)
@@ -105,6 +105,7 @@ private fun DockIcon(st: HomeState, ui: Ui, app: AppEntry, fromDock: Boolean, ba
             app,
             44.dp,
             Modifier
+                .pressScale()
                 .clip(RoundedCornerShape(13.dp))
                 .holdable(
                     onTap = { Actions.open(ctx, st, app) },

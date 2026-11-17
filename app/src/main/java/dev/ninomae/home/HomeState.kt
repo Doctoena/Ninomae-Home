@@ -249,11 +249,26 @@ class HomeState private constructor(private val ctx: Context) {
     fun saveHome() = prefs.edit().putString("homeItems", homeToJson(home)).apply()
 
     private fun homeDefaults() {
-        if (prefs.contains("homeItems")) return
+        if (prefs.contains("homeItems")) {
+            // 0.3: the cover screen's untouched old defaults become the phone home (clock + player).
+            if (!prefs.getBoolean("coverPhoneV3", false)) {
+                val cover = home.filter { it.screen == 1 }
+                val untouched = cover.isEmpty() || cover.map { it.kind }.sorted() == listOf("greeting", "jump")
+                if (untouched) {
+                    home = home.filter { it.screen != 1 } + listOf(
+                        HomeItem(id = newId(), screen = 1, page = 0, x = 0, y = 0, w = 4, h = 1, type = "nwidget", kind = "clock"),
+                        HomeItem(id = newId(), screen = 1, page = 0, x = 0, y = 1, w = 4, h = 1, type = "nwidget", kind = "player"),
+                    )
+                    saveHome()
+                }
+                prefs.edit().putBoolean("coverPhoneV3", true).apply()
+            }
+            return
+        }
         home = listOf(
             HomeItem(id = newId(), screen = 0, page = 0, x = 4, y = 0, w = 4, h = 3, type = "nwidget", kind = "stack"),
-            HomeItem(id = newId(), screen = 1, page = 0, x = 0, y = 0, w = 4, h = 1, type = "nwidget", kind = "greeting"),
-            HomeItem(id = newId(), screen = 1, page = 0, x = 0, y = 1, w = 4, h = 1, type = "nwidget", kind = "jump"),
+            HomeItem(id = newId(), screen = 1, page = 0, x = 0, y = 0, w = 4, h = 1, type = "nwidget", kind = "clock"),
+            HomeItem(id = newId(), screen = 1, page = 0, x = 0, y = 1, w = 4, h = 1, type = "nwidget", kind = "player"),
         )
         saveHome()
     }

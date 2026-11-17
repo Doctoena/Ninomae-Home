@@ -3,7 +3,16 @@ package dev.ninomae.home
 import android.os.SystemClock
 import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -71,6 +80,27 @@ enum class Layer { None, Sidebar, Drawer, Menu, PairMenu, PairMaker, Settings, W
 class Ui {
     var layer by mutableStateOf(Layer.None)
     var editing by mutableStateOf(false)
+
+    /** How far the control deck is pulled down and the app sheet raised (0..1); they follow the finger. */
+    var deck by mutableFloatStateOf(0f)
+    var sheet by mutableFloatStateOf(0f)
+    var gesturing by mutableStateOf(false)
+    var searchFocus by mutableStateOf(false)
+    var screenHpx by mutableFloatStateOf(2000f)
+    var screenWdp by mutableFloatStateOf(400f)
+
+    /** Let go of the deck: a flick or past a third opens it, otherwise it slides back. */
+    fun settleDeck(velocityY: Float) {
+        val open = velocityY > 1400f || (velocityY > -1400f && deck > 0.33f)
+        layer = if (open) Layer.Sidebar else if (layer == Layer.Sidebar) Layer.None else layer
+        gesturing = false
+    }
+
+    fun settleSheet(velocityY: Float) {
+        val open = velocityY < -1400f || (velocityY < 1400f && sheet > 0.33f)
+        layer = if (open) Layer.Drawer else if (layer == Layer.Drawer) Layer.None else layer
+        gesturing = false
+    }
 
     var menuApp by mutableStateOf<AppEntry?>(null)
     var menuFromDock by mutableStateOf(false)
@@ -166,51 +196,82 @@ fun Home(st: HomeState, ui: Ui) {
         val compact = maxWidth < 600.dp
         val screenH = maxHeight
         val screenW = maxWidth
+        val density = LocalDensity.current
+        val screenHpx = with(density) { screenH.toPx() }
+        SideEffect { ui.screenHpx = screenHpx; ui.screenWdp = screenW.value }
+
+        // The deck and sheet follow the finger; otherwise they spring to wherever the layer says.
+        LaunchedEffect(ui.layer, ui.gesturing) {
+            if (!ui.gesturing) animate(ui.deck, if (ui.layer == Layer.Sidebar) 1f else 0f, animationSpec = spring(0.84f, 380f)) { v, _ -> ui.deck = v }
+        }
+        LaunchedEffect(ui.layer, ui.gesturing) {
+            if (!ui.gesturing) animate(ui.sheet, if (ui.layer == Layer.Drawer) 1f else 0f, animationSpec = spring(0.86f, 400f)) { v, _ -> ui.sheet = v }
+        }
+
         val open = ui.layer != Layer.None
         val floating = ui.layer == Layer.Menu || ui.layer == Layer.PairMenu
-        val dim by animateFloatAsState(if (open && !floating) 0.38f else 0f, label = "dim")
+        val panel = open && !floating && ui.layer != Layer.Sidebar && ui.layer != Layer.Drawer
+        val panelDim by animateFloatAsState(if (panel) 0.4f else if (floating) 0.18f else 0f, label = "dim")
+        val dim = maxOf(panelDim, ui.deck * 0.72f, ui.sheet * 0.5f)
+        val behind = maxOf(ui.deck, ui.sheet)
         val insets = Modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
             .windowInsetsPadding(WindowInsets.navigationBars)
 
-        // ---------- desktop ----------
-        Column(insets) {
+        // ---------- desktop (eases back a touch while something is over it) ----------
+        Column(
+            insets
+                .graphicsLayer { val k = 1f - 0.05f * behind; scaleX = k; scaleY = k; alpha = 1f - 0.35f * behind }
+                .then(if (behind > 0.01f) Modifier.blur((18 * behind).dp, BlurredEdgeTreatment.Unbounded) else Modifier),
+        ) {
             Bar(st, ui, compact, Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp))
             HomeGrid(st, ui, compact, Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp))
-            Box(Modifier.fillMaxWidth().padding(bottom = 12.dp, top = 2.dp), contentAlignment = Alignment.Center) {
+            if (compact && !ui.editing) SearchPill(ui)
+            Box(Modifier.fillMaxWidth().padding(bottom = 12.dp, top = 8.dp), contentAlignment = Alignment.Center) {
                 if (ui.editing) EditBar(ui) else Dock(st, ui, compact, Modifier)
             }
         }
 
         // ---------- dim + tap outside to close ----------
-        if (open) {
+        if (open || dim > 0.001f) {
             Box(
                 Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = dim))
-                    .pointerInput(Unit) { detectTapGestures { ui.close() } },
+                    .then(if (open) Modifier.pointerInput(Unit) { detectTapGestures { ui.close() } } else Modifier),
             )
         }
 
-        // ---------- overlays ----------
+        // ---------- control deck: pulled down from the top ----------
+        if (ui.deck > 0.001f || ui.layer == Layer.Sidebar) {
+            Box(insets) {
+                Deck(
+                    st, ui, ui.deck,
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .then(if (compact) Modifier.fillMaxWidth() else Modifier.width(410.dp))
+                        .fillMaxHeight()
+                        .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top))
+                        .padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 10.dp)
+                        .deckDrag(ui),
+                )
+            }
+        }
+
+        // ---------- all apps: a sheet from the bottom ----------
+        val sheetH = if (compact) screenH * 0.9f else minOf(screenH * 0.86f, 760.dp)
+        if (ui.sheet > 0.001f || ui.layer == Layer.Drawer) {
+            Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))) {
+                Sheet(
+                    st, ui, ui.sheet, compact, with(density) { sheetH.toPx() },
+                    Modifier.align(Alignment.BottomCenter).width(if (compact) screenW else minOf(screenW - 16.dp, 680.dp)).height(sheetH),
+                )
+            }
+        }
+
+        // ---------- panels ----------
         Box(insets) {
-            AnimatedVisibility(
-                ui.layer == Layer.Sidebar,
-                Modifier.align(Alignment.TopEnd).padding(top = 48.dp, end = 8.dp, start = 8.dp),
-                enter = fadeIn() + slideInVertically { -it / 10 } + scaleIn(initialScale = 0.97f, transformOrigin = TransformOrigin(1f, 0f)),
-                exit = fadeOut() + slideOutVertically { -it / 14 },
-            ) {
-                Sidebar(st, ui, Modifier.then(if (compact) Modifier.fillMaxWidth() else Modifier.width(340.dp)).heightIn(max = screenH - 80.dp))
-            }
-            AnimatedVisibility(
-                ui.layer == Layer.Drawer,
-                Modifier.align(Alignment.BottomCenter).padding(bottom = 90.dp, start = 8.dp, end = 8.dp),
-                enter = fadeIn() + slideInVertically { it / 12 } + scaleIn(initialScale = 0.97f, transformOrigin = TransformOrigin(0.5f, 1f)),
-                exit = fadeOut() + slideOutVertically { it / 16 },
-            ) {
-                Drawer(st, ui, compact, Modifier.width(if (compact) screenW else minOf(screenW - 16.dp, 640.dp)).heightIn(max = screenH - 150.dp))
-            }
             Centered(ui.layer == Layer.PairMaker) {
                 PairMaker(st, ui, compact, Modifier.width(minOf(screenW - 16.dp, 560.dp)).heightIn(max = screenH - 120.dp))
             }
@@ -228,12 +289,12 @@ fun Home(st: HomeState, ui: Ui) {
             }
         }
 
-        // ---------- menus pinned to what was held ----------
+        // ---------- menus, grown out of what was held ----------
         if (ui.layer == Layer.Menu) {
-            Anchored(ui.anchor, ui.above, if (ui.menuFromDock) 4f else 8f) { AppMenu(st, ui) }
+            Anchored(ui.anchor, ui.above, if (ui.menuFromDock) 4f else 10f) { GrowIn(ui.above) { AppMenu(st, ui, compact) } }
         }
         if (ui.layer == Layer.PairMenu) {
-            Anchored(ui.anchor, ui.above, 8f) { PairMenu(st, ui) }
+            Anchored(ui.anchor, ui.above, 10f) { GrowIn(ui.above) { PairMenu(st, ui) } }
         }
 
         // ---------- dragging ----------
@@ -241,6 +302,54 @@ fun Home(st: HomeState, ui: Ui) {
             RemoveZone(ui, Modifier.align(Alignment.TopCenter).padding(top = 40.dp))
             Ghost(st, ui)
         }
+    }
+}
+
+/** Search on the home screen, down where the thumb is. Opens all apps with the keyboard up. */
+@Composable
+private fun SearchPill(ui: Ui) {
+    val pal = LocalPal.current
+    Piece(
+        Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(50.dp).pressScale(0.97f),
+        RoundedCornerShape(25.dp),
+        pal.l3.copy(alpha = 0.94f),
+        edge = true,
+        onClick = { ui.searchFocus = true; ui.layer = Layer.Drawer },
+    ) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Glyph("search", size = 21.dp, color = pal.sub)
+            Spacer(Modifier.width(12.dp))
+            Lbl("Search apps and the web", size = 15.sp, color = pal.dim)
+        }
+    }
+}
+
+/** Pops in from the side it's attached to: a quick spring in scale and fade. */
+@Composable
+fun GrowIn(fromBottom: Boolean, content: @Composable () -> Unit) {
+    val a = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { a.animateTo(1f, spring(dampingRatio = 0.72f, stiffness = 520f)) }
+    Box(
+        Modifier.graphicsLayer {
+            alpha = a.value.coerceIn(0f, 1f)
+            val k = 0.86f + 0.14f * a.value
+            scaleX = k
+            scaleY = k
+            transformOrigin = TransformOrigin(0.2f, if (fromBottom) 1f else 0f)
+        },
+    ) { content() }
+}
+
+/** Drag the open deck up to put it away. */
+private fun Modifier.deckDrag(ui: Ui): Modifier = pointerInput(Unit) {
+    val vt = VelocityTracker()
+    detectVerticalDragGestures(
+        onDragStart = { vt.resetTracking(); ui.gesturing = true },
+        onDragEnd = { ui.settleDeck(vt.calculateVelocity().y) },
+        onDragCancel = { ui.settleDeck(0f) },
+    ) { c, dy ->
+        vt.addPosition(c.uptimeMillis, c.position)
+        ui.deck = (ui.deck + dy / (ui.screenHpx * 0.5f)).coerceIn(0f, 1f)
     }
 }
 

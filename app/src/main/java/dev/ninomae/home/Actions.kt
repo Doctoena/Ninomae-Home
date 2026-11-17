@@ -111,6 +111,7 @@ object Actions {
         start(ctx, Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=" + Uri.encode(q))))
 
     fun wifi(ctx: Context) = start(ctx, Intent(Settings.Panel.ACTION_WIFI))
+    fun location(ctx: Context) = start(ctx, Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
     fun bluetooth(ctx: Context) = start(ctx, Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
     fun androidSettings(ctx: Context) = start(ctx, Intent(Settings.ACTION_SETTINGS))
     fun clock(ctx: Context) = start(ctx, Intent(AlarmClock.ACTION_SHOW_ALARMS))

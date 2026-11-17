@@ -43,7 +43,7 @@ fun SettingsPanel(st: HomeState, ui: Ui, modifier: Modifier) {
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Title("Ninomae Home", size = 18.sp)
-                    Lbl("Version 0.2", size = 12.sp, color = pal.sub)
+                    Lbl("Version 0.3", size = 12.sp, color = pal.sub)
                 }
                 IconButton("close") { ui.close() }
             }
