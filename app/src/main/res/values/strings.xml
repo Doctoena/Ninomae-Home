@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Ninomae Home</string>
+    <string name="a11y_label">Ninomae Home: split screen and system buttons</string>
+    <string name="a11y_desc">Lets your home screen open app pairs in split screen, and run lock, screenshot, power menu and quick panel from the sidebar. It does not read anything on your screen.</string>
+</resources>
