@@ -47,8 +47,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -82,19 +80,13 @@ fun Sheet(st: HomeState, ui: Ui, p: Float, compact: Boolean, sheetHeightPx: Floa
     var games by remember { mutableStateOf(false) }
     val grid = rememberLazyGridState()
     val scope = rememberCoroutineScope()
-    val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val notes by NotifService.notes.collectAsState()
     val badged = remember(notes) { notes.map { it.pkg }.toSet() }
     val cols = if (compact) 4 else 6
 
-    // Opening for a search (the home search pill) puts the cursor in the field.
-    LaunchedEffect(ui.layer, ui.searchFocus) {
-        if (ui.layer == Layer.Apps && ui.searchFocus) {
-            runCatching { focus.requestFocus() }
-            keyboard?.show()
-            ui.searchFocus = false
-        }
+    // Closing the sheet clears the search and puts the keyboard away.
+    LaunchedEffect(ui.layer) {
         if (ui.layer != Layer.Apps) {
             q = ""
             keyboard?.hide()
@@ -224,7 +216,7 @@ fun Sheet(st: HomeState, ui: Ui, p: Float, compact: Boolean, sheetHeightPx: Floa
                 Glyph("search", size = 21.dp, color = pal.sub)
                 Spacer(Modifier.width(12.dp))
                 BasicTextField(
-                    q, { q = it }, Modifier.weight(1f).focusRequester(focus),
+                    q, { q = it }, Modifier.weight(1f),
                     singleLine = true,
                     textStyle = TextStyle(color = pal.fg, fontSize = 16.sp, fontFamily = Sans),
                     cursorBrush = SolidColor(pal.acc),

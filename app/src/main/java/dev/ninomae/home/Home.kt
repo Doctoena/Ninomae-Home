@@ -88,7 +88,6 @@ class Ui {
     var deck by mutableFloatStateOf(0f)
     var sheet by mutableFloatStateOf(0f)
     var gesturing by mutableStateOf(false)
-    var searchFocus by mutableStateOf(false)
     var screenHpx by mutableFloatStateOf(2000f)
     var screenWdp by mutableFloatStateOf(400f)
     /** Set by the activity: ask Android for permissions, and bumped when the answer comes back. */
@@ -251,7 +250,6 @@ fun Home(st: HomeState, ui: Ui) {
             if (ownBar) Bar(st, ui, compact, Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp))
             else Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars).padding(bottom = 4.dp))
             HomeGrid(st, ui, compact, Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp))
-            if (compact && !ui.editing) SearchPill(ui)
             Box(Modifier.fillMaxWidth().padding(bottom = 12.dp, top = 8.dp), contentAlignment = Alignment.Center) {
                 if (ui.editing) EditBar(ui) else Dock(st, ui, compact, Modifier)
             }
@@ -325,25 +323,6 @@ fun Home(st: HomeState, ui: Ui) {
         if (ui.drag != null) {
             RemoveZone(ui, Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars).padding(top = if (ownBar) 40.dp else 4.dp))
             Ghost(st, ui)
-        }
-    }
-}
-
-/** Search on the home screen, down where the thumb is. Opens all apps with the keyboard up. */
-@Composable
-private fun SearchPill(ui: Ui) {
-    val pal = LocalPal.current
-    Piece(
-        Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(50.dp).pressScale(0.97f),
-        RoundedCornerShape(25.dp),
-        pal.l3.copy(alpha = 0.94f),
-        edge = true,
-        onClick = { ui.searchFocus = true; ui.layer = Layer.Apps },
-    ) {
-        Row(Modifier.fillMaxSize().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Glyph("search", size = 21.dp, color = pal.sub)
-            Spacer(Modifier.width(12.dp))
-            Lbl("Search apps and the web", size = 15.sp, color = pal.dim)
         }
     }
 }
