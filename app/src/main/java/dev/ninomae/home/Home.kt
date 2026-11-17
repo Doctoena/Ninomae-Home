@@ -171,12 +171,12 @@ fun Home(st: HomeState, ui: Ui) {
         val dim by animateFloatAsState(if (open && !floating) 0.38f else 0f, label = "dim")
         val insets = Modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+            .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
             .windowInsetsPadding(WindowInsets.navigationBars)
 
         // ---------- desktop ----------
         Column(insets) {
-            Bar(st, ui, compact, Modifier.fillMaxWidth().padding(8.dp))
+            Bar(st, ui, compact, Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp))
             HomeGrid(st, ui, compact, Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp))
             Box(Modifier.fillMaxWidth().padding(bottom = 12.dp, top = 2.dp), contentAlignment = Alignment.Center) {
                 if (ui.editing) EditBar(ui) else Dock(st, ui, compact, Modifier)
@@ -197,7 +197,7 @@ fun Home(st: HomeState, ui: Ui) {
         Box(insets) {
             AnimatedVisibility(
                 ui.layer == Layer.Sidebar,
-                Modifier.align(Alignment.TopEnd).padding(top = 52.dp, end = 8.dp, start = 8.dp),
+                Modifier.align(Alignment.TopEnd).padding(top = 48.dp, end = 8.dp, start = 8.dp),
                 enter = fadeIn() + slideInVertically { -it / 10 } + scaleIn(initialScale = 0.97f, transformOrigin = TransformOrigin(1f, 0f)),
                 exit = fadeOut() + slideOutVertically { -it / 14 },
             ) {
@@ -238,7 +238,7 @@ fun Home(st: HomeState, ui: Ui) {
 
         // ---------- dragging ----------
         if (ui.drag != null) {
-            RemoveZone(ui, Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top)))
+            RemoveZone(ui, Modifier.align(Alignment.TopCenter).padding(top = 40.dp))
             Ghost(st, ui)
         }
     }

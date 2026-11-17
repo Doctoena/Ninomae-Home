@@ -27,6 +27,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -34,21 +38,68 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** Replaces Android's status bar on the home screen: pairs left, player middle, status and clock right. */
+/**
+ * Replaces Android's status bar on the home screen: pairs left, player middle, status and clock right.
+ * It sits right at the top edge; only a piece that would run into the camera hole steps sideways around it.
+ */
 @Composable
 fun Bar(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
-    Box(modifier.height(36.dp)) {
-        PairsPiece(st, ui, compact, Modifier.align(Alignment.CenterStart))
-        if (!compact) PlayerPiece(ui, Modifier.align(Alignment.Center))
-        StatusPieces(st, ui, Modifier.align(Alignment.CenterEnd))
+    val view = LocalView.current
+    val gap = with(LocalDensity.current) { 8.dp.toPx() }
+    var bar by remember { mutableStateOf(Rect.Zero) }
+    var left by remember { mutableStateOf(Rect.Zero) }
+    var mid by remember { mutableStateOf(Rect.Zero) }
+    var right by remember { mutableStateOf(Rect.Zero) }
+    // Camera holes along the top edge, in the same (window) coordinates as boundsInRoot.
+    val holes = remember(bar) {
+        view.rootWindowInsets?.displayCutout?.boundingRects.orEmpty()
+            .filter { it.top <= 0 && it.width() > 0 && it.height() > 0 }
+            .map { Rect(it.left.toFloat(), it.top.toFloat(), it.right.toFloat(), it.bottom.toFloat()) }
+    }
+    fun hit(r: Rect) = holes.firstOrNull { r != Rect.Zero && it.left < r.right + gap && it.right > r.left - gap && it.top < r.bottom }
+    // Push each group just clear of a hole it would touch.
+    val leftShift = hit(left)?.let { it.right + gap - left.left } ?: 0f
+    val rightShift = hit(right)?.let { it.left - gap - right.right } ?: 0f
+    val midShift = hit(mid)?.let { h -> if (mid.center.x < h.center.x) h.left - gap - mid.right else h.right + gap - mid.left } ?: 0f
+
+    if (compact) {
+        // Cover screen: the camera sits in the middle, so it's clock + pairs | camera | status, like a phone.
+        Box(modifier.height(36.dp)) {
+            Row(Modifier.align(Alignment.CenterStart), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                ClockPiece(corners(Rad.container, Rad.joined, Rad.joined, Rad.container))
+                PairsPiece(st, ui, true, Modifier, corners(Rad.joined, Rad.container, Rad.container, Rad.joined))
+            }
+            StatusPieces(st, ui, Modifier.align(Alignment.CenterEnd), withClock = false)
+        }
+        return
+    }
+    Box(modifier.height(36.dp).onGloballyPositioned { bar = it.boundsInRoot() }) {
+        PairsPiece(
+            st, ui, compact,
+            Modifier.align(Alignment.CenterStart)
+                .onGloballyPositioned { left = it.boundsInRoot() }
+                .offset { IntOffset(leftShift.roundToInt(), 0) },
+        )
+        if (!compact) PlayerPiece(
+            ui,
+            Modifier.align(Alignment.Center)
+                .onGloballyPositioned { mid = it.boundsInRoot() }
+                .offset { IntOffset(midShift.roundToInt(), 0) },
+        )
+        StatusPieces(
+            st, ui,
+            Modifier.align(Alignment.CenterEnd)
+                .onGloballyPositioned { right = it.boundsInRoot() }
+                .offset { IntOffset(rightShift.roundToInt(), 0) },
+        )
     }
 }
 
 @Composable
-private fun PairsPiece(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
+private fun PairsPiece(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier, shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(Rad.container)) {
     val pal = LocalPal.current
     val ctx = LocalContext.current
-    Piece(modifier.height(36.dp), RoundedCornerShape(Rad.container)) {
+    Piece(modifier.height(36.dp), shape) {
         Row(
             Modifier.fillMaxHeight().padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -92,7 +143,7 @@ private fun PairsPiece(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifi
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Glyph("add", size = 18.dp, color = pal.sub)
-                if (st.pairs.isEmpty()) {
+                if (st.pairs.isEmpty() && !compact) {
                     Spacer(Modifier.width(4.dp))
                     Lbl("New pair", size = 13.sp, color = pal.sub)
                 }
@@ -123,11 +174,9 @@ private fun PlayerPiece(ui: Ui, modifier: Modifier) {
 }
 
 @Composable
-private fun StatusPieces(st: HomeState, ui: Ui, modifier: Modifier) {
+private fun StatusPieces(st: HomeState, ui: Ui, modifier: Modifier, withClock: Boolean = true) {
     val pal = LocalPal.current
-    val ctx = LocalContext.current
     val notes by NotifService.notes.collectAsState()
-    val now = rememberNow()
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Piece(
             Modifier.height(36.dp).clickable { ui.toggle(Layer.Sidebar) },
@@ -147,19 +196,23 @@ private fun StatusPieces(st: HomeState, ui: Ui, modifier: Modifier) {
         }
         Piece(
             Modifier.size(36.dp).clickable { ui.toggle(Layer.Sidebar) },
-            RoundedCornerShape(Rad.joined),
+            if (withClock) RoundedCornerShape(Rad.joined) else corners(Rad.joined, Rad.container, Rad.container, Rad.joined),
         ) {
             Glyph("notifications", Modifier.align(Alignment.Center), size = 19.dp, fill = notes.isNotEmpty())
             if (notes.isNotEmpty()) {
                 Box(Modifier.align(Alignment.Center).offset(6.dp, (-6).dp).size(7.dp).clip(CircleShape).background(pal.acc))
             }
         }
-        Piece(
-            Modifier.height(36.dp).clickable { Actions.clock(ctx) },
-            corners(Rad.joined, Rad.container, Rad.container, Rad.joined),
-        ) {
-            Num(clockText(now), Modifier.align(Alignment.Center).padding(horizontal = 12.dp), size = 15.sp)
-        }
+        if (withClock) ClockPiece(corners(Rad.joined, Rad.container, Rad.container, Rad.joined))
+    }
+}
+
+@Composable
+private fun ClockPiece(shape: androidx.compose.ui.graphics.Shape) {
+    val ctx = LocalContext.current
+    val now = rememberNow()
+    Piece(Modifier.height(36.dp).clickable { Actions.clock(ctx) }, shape) {
+        Num(clockText(now), Modifier.align(Alignment.Center).padding(horizontal = 12.dp), size = 15.sp)
     }
 }
 
