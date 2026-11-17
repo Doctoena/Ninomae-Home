@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,6 +26,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,11 +55,14 @@ fun Drawer(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
     val ctx = LocalContext.current
     var q by remember { mutableStateOf("") }
     var sort by remember { mutableIntStateOf(0) }
-    val list = remember(st.apps, q, sort, st.launches) {
+    val notes by NotifService.notes.collectAsState()
+    val badged = remember(notes) { notes.map { it.pkg }.toSet() }
+    val list = remember(st.apps, q, sort, st.launches, st.hidden) {
+        val visible = st.apps.filter { it.key !in st.hidden }
         val base = when (sort) {
-            1 -> st.apps.sortedByDescending { st.launches[it.key] ?: 0 }
-            2 -> st.apps.filter { it.isGame }
-            else -> st.apps
+            1 -> visible.sortedByDescending { st.launches[it.key] ?: 0 }
+            2 -> visible.filter { it.isGame }
+            else -> visible
         }
         if (q.isBlank()) base else {
             val t = q.trim()
@@ -112,7 +118,7 @@ fun Drawer(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
                             Tile(
                                 p.name,
                                 Modifier.onGloballyPositioned { rect = it.boundsInRoot() },
-                                onLong = { ui.showPairMenu(p, rect, above = true) },
+                                onHold = { ui.showPairMenu(p, rect, above = true) },
                                 onTap = { ui.close(); Actions.openPair(ctx, st, p) },
                             ) { PairIcon(st.app(p.left), st.app(p.right), 50.dp) }
                         }
@@ -127,7 +133,8 @@ fun Drawer(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
             }
         }
 
-        Piece(Modifier.fillMaxWidth().weight(1f, fill = false), corners(j, j, big, big), edge = true) {
+        val searching = q.isNotBlank()
+        Piece(Modifier.fillMaxWidth().weight(1f, fill = false), corners(j, j, if (searching) j else big, if (searching) j else big), edge = true) {
             if (list.isEmpty()) {
                 Lbl(
                     if (sort == 2 && q.isBlank()) "No games found" else "Nothing matches “$q”",
@@ -148,15 +155,42 @@ fun Drawer(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
                         Tile(
                             app.label,
                             Modifier.onGloballyPositioned { rect = it.boundsInRoot() },
-                            onLong = {
+                            onHold = { pos ->
+                                ui.hold = Hold(DragSrc(appKey = app.key), pos)
                                 val mid = with(density) { (screenH.dp / 2).toPx() }
                                 ui.showMenu(app, rect, above = rect.center.y > mid, fromDock = false)
                             },
                             onTap = { Actions.open(ctx, st, app); ui.close() },
-                        ) { AppIcon(app, 54.dp) }
+                        ) {
+                            Box {
+                                AppIcon(app, 54.dp)
+                                if (st.dots && app.pkg in badged) Badge(Modifier.align(Alignment.TopEnd).offset(3.dp, (-3).dp), 13.dp)
+                            }
+                        }
                     }
                 }
             }
+        }
+        if (searching) {
+            SearchOut("travel_explore", "Search the web for \u201c${q.trim()}\u201d", RoundedCornerShape(j)) {
+                Actions.webSearch(ctx, q.trim()); ui.close()
+            }
+            SearchOut("shop", "Look in the Play Store", corners(j, j, big, big)) {
+                Actions.playStore(ctx, q.trim()); ui.close()
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchOut(glyph: String, text: String, shape: androidx.compose.ui.graphics.Shape, onClick: () -> Unit) {
+    val pal = LocalPal.current
+    Piece(Modifier.fillMaxWidth().height(46.dp), shape, edge = true, onClick = onClick) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Glyph(glyph, size = 19.dp, color = pal.acc)
+            Spacer(Modifier.width(12.dp))
+            Lbl(text, Modifier.weight(1f))
+            Glyph("north_east", size = 16.dp, color = pal.sub)
         }
     }
 }
@@ -165,7 +199,7 @@ fun Drawer(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
 private fun Tile(
     label: String,
     modifier: Modifier = Modifier,
-    onLong: (() -> Unit)? = null,
+    onHold: (androidx.compose.ui.geometry.Offset) -> Unit = {},
     onTap: () -> Unit,
     icon: @Composable () -> Unit,
 ) {
@@ -174,7 +208,7 @@ private fun Tile(
         modifier
             .width(80.dp)
             .clip(RoundedCornerShape(Rad.container))
-            .press(onLong = onLong, onTap = onTap)
+            .holdable(onTap = onTap, onHold = onHold)
             .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

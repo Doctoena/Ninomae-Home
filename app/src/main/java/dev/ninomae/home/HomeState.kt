@@ -37,6 +37,7 @@ import java.util.UUID
 data class AppEntry(
     val key: String,
     val label: String,
+    val original: String,
     val pkg: String,
     val component: ComponentName,
     val user: UserHandle,
@@ -56,7 +57,8 @@ class HomeState private constructor(private val ctx: Context) {
         }
     }
 
-    private val prefs = ctx.getSharedPreferences("home", Context.MODE_PRIVATE)
+    val prefs = ctx.getSharedPreferences("home", Context.MODE_PRIVATE)
+    val appContext: Context get() = ctx
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val launcherApps = ctx.getSystemService(LauncherApps::class.java)
     private val users = ctx.getSystemService(UserManager::class.java)
@@ -79,9 +81,27 @@ class HomeState private constructor(private val ctx: Context) {
 
     var name by mutableStateOf(prefs.getString("name", "") ?: "")
         private set
-    /** 0 off, 1 left, 2 right. Right keeps a portrait's face clear on most wallpapers. */
-    var widgetSide by mutableIntStateOf(prefs.getInt("widgetSide", 2))
+
+    /** Home screen items for both screens (0 inner, 1 cover). */
+    var home by mutableStateOf(loadHome(prefs))
+    var hidden by mutableStateOf(list("hidden").toSet())
         private set
+    var renames by mutableStateOf(loadMap("renames"))
+        private set
+
+    var labels by mutableStateOf(prefs.getBoolean("labels", true))
+        private set
+    var dots by mutableStateOf(prefs.getBoolean("dots", true))
+        private set
+    var dockRecentsOn by mutableStateOf(prefs.getBoolean("dockRecents", true))
+        private set
+    /** 0 sidebar, 1 Samsung's notification panel, 2 nothing. */
+    var swipeDown by mutableIntStateOf(prefs.getInt("swipeDown", 0))
+        private set
+    var doubleTapLock by mutableStateOf(prefs.getBoolean("doubleTapLock", true))
+        private set
+    /** Which screen was last showing, for things added from outside (shortcuts from other apps). */
+    var lastScreen = 0
 
     var notifAccess by mutableStateOf(false)
         private set
@@ -120,15 +140,18 @@ class HomeState private constructor(private val ctx: Context) {
             }
             apps = list
             firstRunDefaults()
+            homeDefaults()
         }
     }
 
     private fun entry(info: LauncherActivityInfo, user: UserHandle, px: Int): AppEntry {
         val bmp = info.getBadgedIcon(0).toBitmap(px, px, Bitmap.Config.ARGB_8888)
         val serial = users.getSerialNumberForUser(user)
+        val key = "${info.componentName.flattenToShortString()}#$serial"
         return AppEntry(
-            key = "${info.componentName.flattenToShortString()}#$serial",
-            label = info.label.toString(),
+            key = key,
+            label = renames[key] ?: info.label.toString(),
+            original = info.label.toString(),
             pkg = info.componentName.packageName,
             component = info.componentName,
             user = user,
@@ -173,6 +196,12 @@ class HomeState private constructor(private val ctx: Context) {
         saveList("pinned", pinned)
     }
 
+    fun pinAt(key: String, index: Int) {
+        val rest = pinned - key
+        pinned = rest.toMutableList().apply { add(index.coerceIn(0, rest.size), key) }
+        saveList("pinned", pinned)
+    }
+
     fun savePair(p: AppPair) {
         pairs = if (pairs.any { it.id == p.id }) pairs.map { if (it.id == p.id) p else it } else pairs + p
         savePairs()
@@ -190,6 +219,7 @@ class HomeState private constructor(private val ctx: Context) {
     }
 
     fun newPairId(): String = UUID.randomUUID().toString()
+    fun newId(): String = UUID.randomUUID().toString()
 
     // ---------- settings ----------
 
@@ -198,9 +228,34 @@ class HomeState private constructor(private val ctx: Context) {
         prefs.edit().putString("name", v).apply()
     }
 
-    fun updateWidgetSide(v: Int) {
-        widgetSide = v
-        prefs.edit().putInt("widgetSide", v).apply()
+    fun updateLabels(v: Boolean) { labels = v; prefs.edit().putBoolean("labels", v).apply() }
+    fun updateDots(v: Boolean) { dots = v; prefs.edit().putBoolean("dots", v).apply() }
+    fun updateDockRecents(v: Boolean) { dockRecentsOn = v; prefs.edit().putBoolean("dockRecents", v).apply() }
+    fun updateSwipeDown(v: Int) { swipeDown = v; prefs.edit().putInt("swipeDown", v).apply() }
+    fun updateDoubleTapLock(v: Boolean) { doubleTapLock = v; prefs.edit().putBoolean("doubleTapLock", v).apply() }
+
+    fun setHidden(key: String, hide: Boolean) {
+        hidden = if (hide) hidden + key else hidden - key
+        saveList("hidden", hidden.toList())
+    }
+
+    fun rename(key: String, label: String?) {
+        renames = if (label.isNullOrBlank()) renames - key else renames + (key to label.trim())
+        prefs.edit().putString("renames", JSONObject(renames as Map<*, *>).toString()).apply()
+        apps = apps.map { if (it.key == key) it.copy(label = renames[key] ?: it.original) else it }
+            .sortedBy { it.label.lowercase() }
+    }
+
+    fun saveHome() = prefs.edit().putString("homeItems", homeToJson(home)).apply()
+
+    private fun homeDefaults() {
+        if (prefs.contains("homeItems")) return
+        home = listOf(
+            HomeItem(id = newId(), screen = 0, page = 0, x = 4, y = 0, w = 4, h = 3, type = "nwidget", kind = "stack"),
+            HomeItem(id = newId(), screen = 1, page = 0, x = 0, y = 0, w = 4, h = 1, type = "nwidget", kind = "greeting"),
+            HomeItem(id = newId(), screen = 1, page = 0, x = 0, y = 1, w = 4, h = 1, type = "nwidget", kind = "jump"),
+        )
+        saveHome()
     }
 
     fun refreshAccess() {
@@ -219,6 +274,11 @@ class HomeState private constructor(private val ctx: Context) {
         prefs.getString(k, null)?.split('\n')?.filter { it.isNotBlank() } ?: emptyList()
 
     private fun saveList(k: String, v: List<String>) = prefs.edit().putString(k, v.joinToString("\n")).apply()
+
+    private fun loadMap(k: String): Map<String, String> = runCatching {
+        val o = JSONObject(prefs.getString(k, "{}")!!)
+        o.keys().asSequence().associateWith { o.getString(it) }
+    }.getOrDefault(emptyMap())
 
     private fun loadCounts(): Map<String, Int> = runCatching {
         val o = JSONObject(prefs.getString("launches", "{}")!!)

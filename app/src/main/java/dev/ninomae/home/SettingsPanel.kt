@@ -43,7 +43,7 @@ fun SettingsPanel(st: HomeState, ui: Ui, modifier: Modifier) {
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Title("Ninomae Home", size = 18.sp)
-                    Lbl("Version 0.1", size = 12.sp, color = pal.sub)
+                    Lbl("Version 0.2", size = 12.sp, color = pal.sub)
                 }
                 IconButton("close") { ui.close() }
             }
@@ -70,21 +70,51 @@ fun SettingsPanel(st: HomeState, ui: Ui, modifier: Modifier) {
                 )
             }
         }
-        SettingRow("widgets", "Desktop widgets", "Greeting, player and jump back in", js) {
+        Section("Home screen")
+        SettingRow("label", "App names", "Under icons on the home screen", js) { MiniSwitch(st.labels) { st.updateLabels(!st.labels) } }
+        SettingRow("circle_notifications", "Notification dots", "On apps that have notifications", js) { MiniSwitch(st.dots) { st.updateDots(!st.dots) } }
+        SettingRow("history", "Recent apps in the dock", "The middle piece of the dock", js) { MiniSwitch(st.dockRecentsOn) { st.updateDockRecents(!st.dockRecentsOn) } }
+        SettingRow("edit", "Edit the home screen", "Or hold an empty spot", js) {
+            PlainButton("Edit") { ui.close(); ui.editing = true }
+        }
+
+        Section("Gestures")
+        SettingRow("swipe_down", "Swipe down", "On an empty spot of the home screen", js) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Seg("Left", st.widgetSide == 1) { st.updateWidgetSide(1) }
-                Seg("Right", st.widgetSide == 2) { st.updateWidgetSide(2) }
-                Seg("Off", st.widgetSide == 0) { st.updateWidgetSide(0) }
+                Seg("Sidebar", st.swipeDown == 0) { st.updateSwipeDown(0) }
+                Seg("Samsung", st.swipeDown == 1) { st.updateSwipeDown(1) }
+                Seg("Off", st.swipeDown == 2) { st.updateSwipeDown(2) }
+            }
+        }
+        SettingRow("touch_app", "Double-tap to lock", "Needs accessibility", js) { MiniSwitch(st.doubleTapLock) { st.updateDoubleTapLock(!st.doubleTapLock) } }
+        SettingRow("swipe_up", "Swipe up", "Opens all apps", js) {}
+
+        if (st.hidden.isNotEmpty()) {
+            Section("Hidden apps")
+            st.hidden.mapNotNull { st.app(it) }.forEach { app ->
+                Piece(Modifier.fillMaxWidth().height(56.dp), js, edge = true) {
+                    Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        AppIcon(app, 32.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Lbl(app.label, Modifier.weight(1f))
+                        PlainButton("Show") { st.setHidden(app.key, false) }
+                    }
+                }
             }
         }
 
-        Lbl("Access", Modifier.padding(start = 14.dp, top = 10.dp, bottom = 4.dp), size = 13.sp, color = pal.sub)
+        Section("Access")
 
         AccessRow("home", "Home app", "Make Ninomae your home screen", st.isDefaultHome, js) { Actions.homeSettings(ctx) }
         AccessRow("notifications", "Notification access", "The player and notifications", st.notifAccess, js) { Actions.openListenerSettings(ctx) }
         AccessRow("splitscreen_left", "Accessibility", "Split screen, pairs, lock, screenshot, power menu", st.a11yOn, js) { Actions.openAccessibility(ctx) }
         AccessRow("brightness_6", "Change system settings", "Brightness and auto-rotate", st.canWrite, corners(j, j, big, big)) { Actions.openWriteSettings(ctx) }
     }
+}
+
+@Composable
+private fun Section(text: String) {
+    Lbl(text, Modifier.padding(start = 14.dp, top = 12.dp, bottom = 4.dp), size = 13.sp, color = LocalPal.current.sub)
 }
 
 @Composable

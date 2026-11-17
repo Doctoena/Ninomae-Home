@@ -40,6 +40,18 @@
             </intent-filter>
         </activity>
 
+        <!-- Other apps adding a shortcut (a website, a contact) to the home screen. -->
+        <activity
+            android:name=".PinRequestActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".NotifService"
             android:exported="true"

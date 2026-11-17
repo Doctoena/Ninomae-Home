@@ -1,6 +1,8 @@
 package dev.ninomae.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,7 +26,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -140,7 +141,7 @@ private fun StatusPieces(st: HomeState, ui: Ui, modifier: Modifier) {
                 Glyph(if (Status.wifi) "wifi" else "wifi_off", size = 18.dp, color = if (Status.wifi) pal.fg else pal.dim)
                 if (Status.bt) Glyph("bluetooth", size = 18.dp)
                 if (Status.dnd) Glyph("do_not_disturb_on", size = 17.dp, color = pal.acc, fill = true)
-                Glyph(batteryGlyph(), Modifier.rotate(90f), size = 18.dp, color = if (Status.battery <= 15 && !Status.charging) pal.acc else pal.fg)
+                Battery()
                 Num("${Status.battery}", size = 13.sp)
             }
         }
@@ -162,8 +163,21 @@ private fun StatusPieces(st: HomeState, ui: Ui, modifier: Modifier) {
     }
 }
 
-fun batteryGlyph(): String = when {
-    Status.charging -> "battery_charging_full"
-    Status.battery >= 95 -> "battery_full"
-    else -> "battery_${(Status.battery / 15).coerceIn(0, 6)}_bar"
+/** A small horizontal battery like the shell's: outline, fill by level, a bolt when charging. */
+@Composable
+fun Battery() {
+    val pal = LocalPal.current
+    val low = Status.battery <= 15 && !Status.charging
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(22.dp, 12.dp).border(1.5.dp, pal.fg.copy(alpha = 0.8f), RoundedCornerShape(3.5.dp)).padding(2.dp),
+        ) {
+            Box(
+                Modifier.fillMaxHeight().fillMaxWidth((Status.battery / 100f).coerceIn(0.06f, 1f))
+                    .clip(RoundedCornerShape(1.5.dp)).background(if (low) pal.acc else pal.fg),
+            )
+            if (Status.charging) Glyph("bolt", Modifier.align(Alignment.Center), size = 12.dp, color = pal.l3, fill = true)
+        }
+        Box(Modifier.padding(start = 1.dp).size(2.dp, 5.dp).clip(RoundedCornerShape(1.dp)).background(pal.fg.copy(alpha = 0.8f)))
+    }
 }

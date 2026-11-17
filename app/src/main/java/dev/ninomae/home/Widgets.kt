@@ -125,20 +125,20 @@ fun PlayerCard(m: MediaNow, shape: Shape) {
     }
 }
 
-private sealed interface Jump {
+sealed interface Jump {
     data class P(val pair: AppPair) : Jump
     data class A(val app: AppEntry) : Jump
 }
 
 @Composable
-private fun jumpItems(st: HomeState): List<Jump> {
+fun jumpItems(st: HomeState): List<Jump> {
     val pairs = st.pairs.sortedByDescending { it.id == st.activePair }.take(2).map { Jump.P(it) }
     val apps = st.recent.mapNotNull { st.app(it) }.take(4 - pairs.size).map { Jump.A(it) }
     return pairs + apps
 }
 
 @Composable
-private fun JumpBack(st: HomeState, items: List<Jump>, shape: Shape) {
+fun JumpBack(st: HomeState, items: List<Jump>, shape: Shape) {
     val pal = LocalPal.current
     val ctx = LocalContext.current
     Piece(Modifier.fillMaxWidth(), shape) {

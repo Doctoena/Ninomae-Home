@@ -104,6 +104,12 @@ object Actions {
         main.postDelayed({ svc.performGlobalAction(action) }, delay)
     }
 
+    fun webSearch(ctx: Context, q: String) =
+        start(ctx, Intent(Intent.ACTION_WEB_SEARCH).putExtra(android.app.SearchManager.QUERY, q))
+
+    fun playStore(ctx: Context, q: String) =
+        start(ctx, Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=" + Uri.encode(q))))
+
     fun wifi(ctx: Context) = start(ctx, Intent(Settings.Panel.ACTION_WIFI))
     fun bluetooth(ctx: Context) = start(ctx, Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
     fun androidSettings(ctx: Context) = start(ctx, Intent(Settings.ACTION_SETTINGS))

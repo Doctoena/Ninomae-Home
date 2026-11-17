@@ -26,10 +26,11 @@ class MainActivity : ComponentActivity() {
         hideStatusBar()
         st = HomeState.get(this)
         st.load()
+        AppWidgets.init(this)
         setContent {
             NinomaeTheme {
                 // Home never closes on back; back only closes what's open.
-                BackHandler { ui.close() }
+                BackHandler { if (ui.layer != Layer.None) ui.close() else ui.editing = false }
                 Home(st, ui)
             }
         }
@@ -45,13 +46,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // Home pressed while already home: close whatever is open.
+        // Home pressed while already home: close whatever is open, then go to the first page.
+        if (ui.layer == Layer.None && !ui.editing) ui.jumpToPage = 0
         ui.close()
+        ui.editing = false
     }
 
     override fun onStart() {
         super.onStart()
         Status.start(this)
+        AppWidgets.start()
     }
 
     override fun onResume() {
@@ -62,7 +66,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         Status.stop(this)
+        AppWidgets.stop()
         super.onStop()
+    }
+
+    @Deprecated("Widget binding and setup screens still report here")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (!AppWidgets.onResult(requestCode, resultCode)) {
+            @Suppress("DEPRECATION")
+            super.onActivityResult(requestCode, resultCode, data)
+        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
