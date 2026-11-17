@@ -115,6 +115,12 @@ object Actions {
     fun location(ctx: Context) = start(ctx, Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
     fun bluetooth(ctx: Context) = start(ctx, Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
     fun androidSettings(ctx: Context) = start(ctx, Intent(Settings.ACTION_SETTINGS))
+    fun calendar(ctx: Context) = start(
+        ctx,
+        Intent(Intent.ACTION_VIEW, android.provider.CalendarContract.CONTENT_URI.buildUpon().appendPath("time")
+            .appendPath(System.currentTimeMillis().toString()).build()),
+    )
+    fun battery(ctx: Context) = start(ctx, Intent(Intent.ACTION_POWER_USAGE_SUMMARY))
     fun clock(ctx: Context) = start(ctx, Intent(AlarmClock.ACTION_SHOW_ALARMS))
     fun wallpaper(ctx: Context) = start(ctx, Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Wallpaper"))
     fun homeSettings(ctx: Context) = start(ctx, Intent(Settings.ACTION_HOME_SETTINGS))

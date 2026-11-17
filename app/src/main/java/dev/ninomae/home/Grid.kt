@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -439,32 +440,7 @@ fun NinomaeWidget(st: HomeState, ui: Ui, kind: String) {
                 Lbl("Apps you open show up here", Modifier.align(Alignment.Center), size = 13.sp, color = pal.sub)
             } else JumpBack(st, items, all)
         }
-        "clock" -> {
-            val now = rememberNow()
-            Column(Modifier.fillMaxSize().clickable { Actions.clock(ctx) }, verticalArrangement = Arrangement.Center) {
-                val shadow = Shadow(Color.Black.copy(alpha = 0.5f), Offset(0f, 2f), 12f)
-                BasicText(
-                    clockText(now),
-                    style = TextStyle(color = Color.White, fontSize = 64.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black, shadow = shadow),
-                )
-                val w = Glance.weather
-                BasicText(
-                    now.format(DateTimeFormatter.ofPattern("EEEE d MMMM")) + (w?.let { "  ·  ${it.temp} ${it.text}" } ?: ""),
-                    style = TextStyle(color = Color.White, fontSize = 16.sp, fontFamily = Sans, fontWeight = FontWeight.Medium, shadow = shadow),
-                )
-                Glance.event?.let { e ->
-                    Spacer(Modifier.height(6.dp))
-                    Row(
-                        Modifier.clip(RoundedCornerShape(Rad.segment)).background(Color.Black.copy(alpha = 0.32f)).padding(horizontal = 10.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Glyph("event", size = 16.dp, color = Color.White)
-                        Spacer(Modifier.width(6.dp))
-                        Lbl("${e.title}  ·  ${e.whenText}", size = 13.sp, color = Color.White, weight = FontWeight.Medium)
-                    }
-                }
-            }
-        }
+        "clock" -> ClockPieces()
     }
 }
 
@@ -529,6 +505,78 @@ private fun BigFolder(st: HomeState, ui: Ui, item: HomeItem, badged: Set<String>
                                 }
                             }
                             repeat(cols - line.size) { Spacer(Modifier.size(56.dp)) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * C · Pieces: the clock as joined pieces like the bar. The time fills its piece at any size,
+ * and under it the date and one accent fact (the temperature when weather is on, else battery).
+ */
+@Composable
+private fun ClockPieces() {
+    val pal = LocalPal.current
+    val ctx = LocalContext.current
+    val now = rememberNow()
+    val w = Glance.weather
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val wide = maxWidth > 300.dp
+        val rowH = if (maxHeight < 110.dp) 30.dp else 36.dp
+        val timeH = maxHeight - rowH - 4.dp
+        val big = 20.dp
+        val j = Rad.joined
+        // As big as the piece allows: limited by its height, and by its width for four digits.
+        val timeSize = with(LocalDensity.current) { minOf(timeH * 0.62f, maxWidth * 0.3f).toSp() }
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Piece(
+                Modifier.fillMaxWidth().height(timeH),
+                corners(big, big, j, j),
+                pal.l3.copy(alpha = 0.92f),
+                edge = true,
+                onClick = { Actions.clock(ctx) },
+            ) {
+                BasicText(
+                    clockText(now),
+                    Modifier.align(Alignment.Center),
+                    style = TextStyle(color = pal.fg, fontSize = timeSize, fontFamily = TitleFont, fontWeight = FontWeight.Black),
+                    maxLines = 1,
+                )
+            }
+            Row(Modifier.fillMaxWidth().height(rowH), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Piece(
+                    Modifier.weight(0.62f).fillMaxHeight(),
+                    corners(j, j, j, big),
+                    pal.l3.copy(alpha = 0.92f),
+                    edge = true,
+                    onClick = { Actions.calendar(ctx) },
+                ) {
+                    Lbl(
+                        now.format(DateTimeFormatter.ofPattern(if (wide) "EEEE d MMMM" else "EEE d MMM")),
+                        Modifier.align(Alignment.Center).padding(horizontal = 8.dp),
+                        size = 13.sp, weight = FontWeight.SemiBold,
+                    )
+                }
+                Piece(
+                    Modifier.weight(0.38f).fillMaxHeight(),
+                    corners(j, j, big, j),
+                    pal.acc,
+                    onClick = { Actions.battery(ctx) },
+                ) {
+                    Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
+                        if (w != null) {
+                            Glyph(w.glyph, size = 16.dp, color = pal.ink, fill = true)
+                            Spacer(Modifier.width(4.dp))
+                            Num(w.temp, size = 13.sp, color = pal.ink)
+                        } else {
+                            if (Status.charging) {
+                                Glyph("bolt", size = 15.dp, color = pal.ink, fill = true)
+                                Spacer(Modifier.width(2.dp))
+                            }
+                            Num("${Status.battery}%", size = 13.sp, color = pal.ink)
                         }
                     }
                 }
