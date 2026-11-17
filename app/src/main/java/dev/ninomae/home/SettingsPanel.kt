@@ -70,6 +70,20 @@ fun SettingsPanel(st: HomeState, ui: Ui, modifier: Modifier) {
                 )
             }
         }
+        Section("Status bar")
+        SettingRow("smartphone", "Cover screen", "Ninomae's bar, or Samsung's like in your apps", js) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Seg("Ninomae", st.barCover) { st.updateBar(cover = true, own = true) }
+                Seg("Samsung", !st.barCover) { st.updateBar(cover = true, own = false) }
+            }
+        }
+        SettingRow("tablet", "Inner screen", "Ninomae's bar holds your pairs and the player", js) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Seg("Ninomae", st.barInner) { st.updateBar(cover = false, own = true) }
+                Seg("Samsung", !st.barInner) { st.updateBar(cover = false, own = false) }
+            }
+        }
+
         Section("Home screen")
         SettingRow("label", "App names", "Under icons on the home screen", js) { MiniSwitch(st.labels) { st.updateLabels(!st.labels) } }
         SettingRow("circle_notifications", "Notification dots", "On apps that have notifications", js) { MiniSwitch(st.dots) { st.updateDots(!st.dots) } }

@@ -100,6 +100,11 @@ class HomeState private constructor(private val ctx: Context) {
         private set
     var doubleTapLock by mutableStateOf(prefs.getBoolean("doubleTapLock", true))
         private set
+    /** Ninomae's bar (true) or Samsung's status bar, per screen. The cover is a phone, so Samsung's by default. */
+    var barCover by mutableStateOf(prefs.getBoolean("barCover", false))
+        private set
+    var barInner by mutableStateOf(prefs.getBoolean("barInner", true))
+        private set
     /** Which screen was last showing, for things added from outside (shortcuts from other apps). */
     var lastScreen = 0
 
@@ -232,6 +237,11 @@ class HomeState private constructor(private val ctx: Context) {
     fun updateDots(v: Boolean) { dots = v; prefs.edit().putBoolean("dots", v).apply() }
     fun updateDockRecents(v: Boolean) { dockRecentsOn = v; prefs.edit().putBoolean("dockRecents", v).apply() }
     fun updateSwipeDown(v: Int) { swipeDown = v; prefs.edit().putInt("swipeDown", v).apply() }
+    fun updateBar(cover: Boolean, own: Boolean) {
+        if (cover) barCover = own else barInner = own
+        prefs.edit().putBoolean(if (cover) "barCover" else "barInner", own).apply()
+    }
+
     fun updateDoubleTapLock(v: Boolean) { doubleTapLock = v; prefs.edit().putBoolean("doubleTapLock", v).apply() }
 
     fun setHidden(key: String, hide: Boolean) {

@@ -23,8 +23,8 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         window.isNavigationBarContrastEnforced = false
-        hideStatusBar()
         st = HomeState.get(this)
+        applyStatusBar()
         st.load()
         AppWidgets.init(this)
         setContent {
@@ -36,12 +36,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Our bar replaces Android's on the home screen. A swipe from the top edge still shows it briefly. */
-    private fun hideStatusBar() {
+    /**
+     * Each screen picks its own status bar: Ninomae's bar replaces Android's (a swipe from the top edge
+     * still shows it briefly), or Samsung's stays like in every other app.
+     */
+    fun applyStatusBar() {
+        val cover = resources.configuration.screenWidthDp < 600
+        val own = if (cover) st.barCover else st.barInner
         WindowCompat.getInsetsController(window, window.decorView).apply {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            hide(WindowInsetsCompat.Type.statusBars())
+            if (own) hide(WindowInsetsCompat.Type.statusBars()) else show(WindowInsetsCompat.Type.statusBars())
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Folding or unfolding switches screens, and each has its own choice.
+        applyStatusBar()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -61,7 +72,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         st.refreshAccess()
-        hideStatusBar()
+        applyStatusBar()
     }
 
     override fun onStop() {
@@ -80,6 +91,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) hideStatusBar()
+        if (hasFocus) applyStatusBar()
     }
 }

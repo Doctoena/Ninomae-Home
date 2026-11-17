@@ -37,6 +37,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -208,6 +211,11 @@ fun Home(st: HomeState, ui: Ui) {
             if (!ui.gesturing) animate(ui.sheet, if (ui.layer == Layer.Drawer) 1f else 0f, animationSpec = spring(0.86f, 400f)) { v, _ -> ui.sheet = v }
         }
 
+        // Ninomae's bar or Samsung's status bar, chosen per screen in settings.
+        val ownBar = if (compact) st.barCover else st.barInner
+        val activity = LocalContext.current as? MainActivity
+        LaunchedEffect(ownBar, compact) { activity?.applyStatusBar() }
+
         val open = ui.layer != Layer.None
         val floating = ui.layer == Layer.Menu || ui.layer == Layer.PairMenu
         val panel = open && !floating && ui.layer != Layer.Sidebar && ui.layer != Layer.Drawer
@@ -225,7 +233,8 @@ fun Home(st: HomeState, ui: Ui) {
                 .graphicsLayer { val k = 1f - 0.05f * behind; scaleX = k; scaleY = k; alpha = 1f - 0.35f * behind }
                 .then(if (behind > 0.01f) Modifier.blur((18 * behind).dp, BlurredEdgeTreatment.Unbounded) else Modifier),
         ) {
-            Bar(st, ui, compact, Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp))
+            if (ownBar) Bar(st, ui, compact, Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp))
+            else Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars).padding(bottom = 4.dp))
             HomeGrid(st, ui, compact, Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp))
             if (compact && !ui.editing) SearchPill(ui)
             Box(Modifier.fillMaxWidth().padding(bottom = 12.dp, top = 8.dp), contentAlignment = Alignment.Center) {
@@ -252,7 +261,7 @@ fun Home(st: HomeState, ui: Ui) {
                         .align(Alignment.TopEnd)
                         .then(if (compact) Modifier.fillMaxWidth() else Modifier.width(410.dp))
                         .fillMaxHeight()
-                        .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Top))
+                        .windowInsetsPadding(WindowInsets.displayCutout.union(WindowInsets.statusBars).only(WindowInsetsSides.Top))
                         .padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 10.dp)
                         .deckDrag(ui),
                 )
@@ -299,7 +308,7 @@ fun Home(st: HomeState, ui: Ui) {
 
         // ---------- dragging ----------
         if (ui.drag != null) {
-            RemoveZone(ui, Modifier.align(Alignment.TopCenter).padding(top = 40.dp))
+            RemoveZone(ui, Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars).padding(top = if (ownBar) 40.dp else 4.dp))
             Ghost(st, ui)
         }
     }
