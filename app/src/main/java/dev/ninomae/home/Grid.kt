@@ -175,7 +175,7 @@ private fun Modifier.desktopGestures(st: HomeState, ui: Ui): Modifier = composed
             ) { c, dy ->
                 vt.addPosition(c.uptimeMillis, c.position)
                 if (mode == 0) {
-                    mode = if (dy < 0) -1 else when (st.swipeDown) { 0 -> 1; 1 -> 2; else -> 3 }
+                    mode = if (dy < 0) -1 else when (if (ui.screen == 1) st.swipeDown else st.swipeDownInner) { 0 -> 1; 1 -> 2; else -> 3 }
                     if (mode == 1 || mode == -1) ui.gesturing = true
                 }
                 val travel = ui.screenHpx * 0.5f

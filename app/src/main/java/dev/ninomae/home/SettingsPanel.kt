@@ -93,11 +93,18 @@ fun SettingsPanel(st: HomeState, ui: Ui, modifier: Modifier) {
         }
 
         Section("Gestures")
-        SettingRow("swipe_down", "Swipe down", "On an empty spot of the home screen", js) {
+        SettingRow("swipe_down", "Swipe down on the cover", "On an empty spot of the home screen", js) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Seg("Sidebar", st.swipeDown == 0) { st.updateSwipeDown(0) }
-                Seg("Samsung", st.swipeDown == 1) { st.updateSwipeDown(1) }
-                Seg("Off", st.swipeDown == 2) { st.updateSwipeDown(2) }
+                Seg("Deck", st.swipeDown == 0) { st.updateSwipeDown(true, 0) }
+                Seg("Samsung", st.swipeDown == 1) { st.updateSwipeDown(true, 1) }
+                Seg("Off", st.swipeDown == 2) { st.updateSwipeDown(true, 2) }
+            }
+        }
+        SettingRow("swipe_down", "Swipe down on the inner screen", "The bar's status pieces still open the deck", js) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Seg("Deck", st.swipeDownInner == 0) { st.updateSwipeDown(false, 0) }
+                Seg("Samsung", st.swipeDownInner == 1) { st.updateSwipeDown(false, 1) }
+                Seg("Off", st.swipeDownInner == 2) { st.updateSwipeDown(false, 2) }
             }
         }
         SettingRow("touch_app", "Double-tap to lock", "Needs accessibility", js) { MiniSwitch(st.doubleTapLock) { st.updateDoubleTapLock(!st.doubleTapLock) } }

@@ -98,6 +98,9 @@ class HomeState private constructor(private val ctx: Context) {
     /** 0 sidebar, 1 Samsung's notification panel, 2 nothing. */
     var swipeDown by mutableIntStateOf(prefs.getInt("swipeDown", 0))
         private set
+    /** Same choice for the inner screen: Samsung's panel by default. */
+    var swipeDownInner by mutableIntStateOf(prefs.getInt("swipeDownInner", 1))
+        private set
     var doubleTapLock by mutableStateOf(prefs.getBoolean("doubleTapLock", true))
         private set
     /** Ninomae's bar (true) or Samsung's status bar, per screen. The cover is a phone, so Samsung's by default. */
@@ -236,7 +239,10 @@ class HomeState private constructor(private val ctx: Context) {
     fun updateLabels(v: Boolean) { labels = v; prefs.edit().putBoolean("labels", v).apply() }
     fun updateDots(v: Boolean) { dots = v; prefs.edit().putBoolean("dots", v).apply() }
     fun updateDockRecents(v: Boolean) { dockRecentsOn = v; prefs.edit().putBoolean("dockRecents", v).apply() }
-    fun updateSwipeDown(v: Int) { swipeDown = v; prefs.edit().putInt("swipeDown", v).apply() }
+    fun updateSwipeDown(cover: Boolean, v: Int) {
+        if (cover) swipeDown = v else swipeDownInner = v
+        prefs.edit().putInt(if (cover) "swipeDown" else "swipeDownInner", v).apply()
+    }
     fun updateBar(cover: Boolean, own: Boolean) {
         if (cover) barCover = own else barInner = own
         prefs.edit().putBoolean(if (cover) "barCover" else "barInner", own).apply()
