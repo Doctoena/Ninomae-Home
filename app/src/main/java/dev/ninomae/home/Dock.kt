@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * The dock (C3): one capsule of frosted glass. Pinned apps, then (inner screen) recent apps after a
+ * The dock (C3): one squircle of frosted glass. Pinned apps, then (inner screen) recent apps after a
  * hairline, then a rose all-apps circle (no sheen line on top: the user didn't like it). An app with notifications gets a small rose bar under it.
  * Holding an app joins its menu onto the dock; it also takes drops.
  */
@@ -43,7 +43,8 @@ fun Dock(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
     val recents = if (st.dockRecentsOn) st.dockRecents(if (compact) 0 else 3) else emptyList()
     val menuOnDock = ui.layer == Layer.Menu && ui.menuFromDock
     val dropping = ui.drag != null && ui.dockRect.contains(ui.dragPos)
-    val r = 35.dp
+    // A squircle, like the rest of the shell: rounded corners, not a round-ended capsule.
+    val r = 24.dp
     val top = if (menuOnDock) Rad.joined else r
     val shape = RoundedCornerShape(top, top, r, r)
     SideEffect {
