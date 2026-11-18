@@ -263,7 +263,7 @@ fun Home(st: HomeState, ui: Ui) {
 
         val open = ui.layer != Layer.None
         val floating = ui.layer == Layer.Menu || ui.layer == Layer.PairMenu
-        val panel = open && !floating && ui.layer != Layer.Deck && ui.layer != Layer.Apps && ui.layer != Layer.Settings
+        val panel = open && !floating && ui.layer != Layer.Deck && ui.layer != Layer.Apps && ui.layer != Layer.Settings && ui.layer != Layer.Widgets
         val panelDim by animateFloatAsState(if (ui.inFolder) 0.22f else if (panel) 0.4f else if (floating) 0.18f else 0f, label = "dim")
         val dim = maxOf(panelDim, ui.deck * 0.72f, ui.sheet * 0.12f)
         // With the frosted wallpaper, the sheet hides the desktop outright, so it only needs blurring under the deck.
@@ -328,13 +328,14 @@ fun Home(st: HomeState, ui: Ui) {
             }
         }
 
+        // ---------- widget picker: full screen, on the same glass ----------
+        val widgetsP by animateFloatAsState(if (ui.layer == Layer.Widgets) 1f else 0f, spring(1f, 380f), label = "widgets")
+        if (widgetsP > 0.001f) WidgetPicker(st, ui, { widgetsP }, Modifier.fillMaxSize())
+
         // ---------- panels ----------
         Box(insets) {
             Centered(ui.layer == Layer.PairMaker) {
                 PairMaker(st, ui, compact, Modifier.width(minOf(screenW - 16.dp, 560.dp)).heightIn(max = screenH - 120.dp))
-            }
-            Centered(ui.layer == Layer.Widgets) {
-                WidgetPicker(st, ui, Modifier.width(minOf(screenW - 16.dp, 640.dp)).heightIn(max = screenH - 120.dp))
             }
             Centered(ui.layer == Layer.Rename) {
                 RenamePanel(st, ui, Modifier.width(minOf(screenW - 16.dp, 380.dp)))

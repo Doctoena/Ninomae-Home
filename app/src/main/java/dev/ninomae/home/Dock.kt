@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -26,7 +25,6 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -85,7 +83,6 @@ private fun Hairline() {
 @Composable
 private fun DockIcon(st: HomeState, ui: Ui, app: AppEntry, fromDock: Boolean, badge: Boolean, pieceRect: () -> Rect) {
     val ctx = LocalContext.current
-    val pal = LocalPal.current
     val dragged = ui.drag?.src?.let { it.fromDock && it.appKey == app.key } == true
     Box(Modifier.alpha(if (dragged) 0.25f else 1f)) {
         Box(
@@ -100,15 +97,6 @@ private fun DockIcon(st: HomeState, ui: Ui, app: AppEntry, fromDock: Boolean, ba
                     },
                 ),
         ) { GlassIcon(app, 48.dp) }
-        // Notifications: a small rose bar under the icon, not a dot on it.
-        if (badge) Box(
-            Modifier.align(Alignment.BottomCenter).offset(y = 7.dp).size(16.dp, 4.dp).clip(RoundedCornerShape(2.dp)).background(pal.acc),
-        )
+        if (badge) NoteBar()
     }
-}
-
-@Composable
-fun Badge(modifier: Modifier = Modifier, size: Dp = 12.dp) {
-    val pal = LocalPal.current
-    Box(modifier.size(size).clip(CircleShape).background(pal.l3).padding(2.dp).clip(CircleShape).background(pal.acc))
 }

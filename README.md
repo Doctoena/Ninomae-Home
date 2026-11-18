@@ -1,27 +1,70 @@
 # Ninomae Home
 
-An Android home screen for the Galaxy Z Fold 7 in the Ninomae shell's look: rounded squircles, joined pieces, frosted glass, colours from the wallpaper.
+An Android home screen for the **Galaxy Z Fold 7**, in the look of the [Ninomae shell](https://github.com/Doctoena/Ninomae-Shell): rounded squircles, joined pieces, frosted glass, and colours taken from your wallpaper. The cover screen gets a phone layout. The inner screen gets a desktop one, with a bar, a dock and app pairs.
 
-- **Home screen grid** with pages (8×5 on the inner screen, 4×6 on the cover): hold and drag apps anywhere, drop one app on another for a folder, drop on the dock to pin, drag to the top to remove.
-- **Widgets**: every app's Android widgets plus Ninomae's own (stack, greeting, player, jump back in, clock). The clock is a frosted slab with the time, the date and a small agenda: next event, next alarm, weather.
-- **Edit mode**: hold an empty spot. Tap anything to pick it: drag its edges to resize, and the bottom bar turns into its card (rename, unstack, remove).
-- **Shortcuts** in the hold menu, and other apps can add shortcuts to the home screen.
-- **Notification dots**, **hide** and **rename** apps, web and Play Store search from the drawer.
-- **Gestures**: swipe up for all apps, swipe down for the sidebar or Samsung's panel, double-tap to lock.
-- **Search that answers**: sums (12*7, 15% of 80), conversions (5 km to mi, 70 f in c), contacts (call or text), Android settings pages, the web and the Play Store.
-- **At a glance**: your next calendar event, and the weather if you turn it on (Open-Meteo, rough location only), under the clock.
-- **Look**: set the wallpaper from Ninomae and it frosts it for the drawer, settings, dock, folders and clock (Samsung turns off Android's window blur), and takes its colours. Or a swatch. Themed icons cover every app (ones without a monochrome icon get one made from their logo), plus icon packs.
-- **Widget stacks** (drop a widget on a widget) and **big folders** (resize a folder to tap its apps directly).
-- **Grid sizes** per screen, **lock the layout**, **backup and restore** to a file.
-- **Bar** in place of the status bar: app pairs on the left, the player in the middle, status and clock on the right.
-- **Dock**: one frosted capsule: pinned apps, recent apps, all apps. A rose bar marks apps with notifications. Hold an app for Open, Split, Window, Pair, Pin, App info and Uninstall.
-- **App drawer**: full screen on frosted glass, search at the top and focused as it opens. A slim rail of Most used, Recent, A–Z and groups (from Android's app categories). While you type, the top match opens with Enter. Swipe down to close.
-- **Folders**: a pane of frosted glass grown from the folder, four apps a page, add apps from a picker, rename in place.
-- **Settings**: full screen on glass, tiles that show what each part is set to, and a search for any setting.
-- **App pairs**: two apps opened together in split screen, named, from the bar.
-- **Sidebar**: toggles, flashlight, screenshot, lock, wallpaper, Samsung's panel, the player with volume and brightness, and notifications.
+<p align="center">
+  <img src="docs/screenshots/home.jpg" width="250" alt="Home screen: a frosted clock, glass folders and a glass dock over the wallpaper">
+  <img src="docs/screenshots/folder.jpg" width="250" alt="An open folder: a frosted pane grown out of the folder's icon">
+  <img src="docs/screenshots/menu.jpg" width="250" alt="Holding an app on the dock: its shortcuts and actions">
+</p>
 
-The inner screen gets the desktop layout. The cover screen gets a compact one.
+*Screenshots are from the cover screen.*
+
+## Frosted glass
+
+Samsung turns off Android's window blur, and Android won't let apps read your wallpaper. So you set the wallpaper from Ninomae (**Settings → Look → Wallpaper**). It keeps a frosted copy for the glass, a small preview, and the wallpaper's main colour for the theme. The drawer, settings, folders, dock, clock and menus are then all frosted from it, lined up with where the wallpaper really is.
+
+## The app drawer
+
+<p align="center">
+  <img src="docs/screenshots/search.jpg" width="250" alt="Searching for an app">
+  <img src="docs/screenshots/group.jpg" width="250" alt="The Media group in the drawer's rail">
+</p>
+
+- Swipe up from anywhere. Search is at the top and **focused as it opens**, so you can type straight away. Enter opens the top match.
+- A slim rail on the left: **Most used**, **Recent**, **A–Z** (with a letter scrubber), then groups made from the categories apps give Android (Social, Media, Games, Maps, Work…).
+- While you type, the rail picks what to show: apps, people, settings, or the web.
+- Search answers questions too: sums (`12*7`, `15% of 80`), conversions (`5 km to mi`), contacts (call or text), and Android settings pages by name.
+- Swipe down on the list to close it. It follows your finger.
+
+## Folders and the hold menu
+
+- A **folder** opens as a pane of frosted glass grown from its icon, four apps to a page. Tap the name to rename it, **＋** to tick apps in or out, and **↗** to see them all at once.
+- **Hold an app** for its own shortcuts, then Split screen, Pop-up window, Make a pair, Pin, Rename, Hide, App info and Uninstall. From the dock the menu joins onto it. In the drawer or a folder, it opens without closing them.
+- **Notifications** show as a small rose bar under the app's icon, the same everywhere.
+
+## Edit mode and widgets
+
+<p align="center">
+  <img src="docs/screenshots/edit.jpg" width="250" alt="Edit mode with the clock picked: handles on its edges, its card at the bottom">
+  <img src="docs/screenshots/widgets.jpg" width="250" alt="The widget picker with Ninomae's own widgets open">
+</p>
+
+- **Hold an empty spot** to edit. Tap anything to pick it: drag its edges to resize it, and the bottom bar turns into its card (Rename, Unstack, Another widget, Remove). Hold and drag to move it, or drop an app on another app to make a folder.
+- **Widgets**: every app's Android widgets, plus Ninomae's own:
+  - **Clock**: a frosted slab with the time, the date, and an agenda of your next event, next alarm and the weather.
+  - **Greeting, Player, Jump back in**, and a **stack** that holds several widgets you swipe through.
+- **Widget stacks**: drop one widget on another. **Big folders**: resize a folder to tap its apps straight from the home screen.
+
+## Settings
+
+<p align="center">
+  <img src="docs/screenshots/settings.jpg" width="250" alt="Settings tiles">
+  <img src="docs/screenshots/look.jpg" width="250" alt="The Look page: wallpaper, colours, app icons">
+</p>
+
+- Tiles that show what each part is set to, and a search for any setting.
+- **Look**: the wallpaper, colours (from the wallpaper, a swatch, or Samsung's), **themed icons** for every app (apps without a monochrome icon get one made from their logo), and icon packs.
+- **Home screen**: grid size per screen, app names, notification bars, lock the layout.
+- **Gestures**: swipe down for the deck or Samsung's panel (per screen), double-tap to lock.
+- **At a glance**: your next calendar event, and the weather if you turn it on (Open-Meteo, rough location only).
+- **Backup and restore** your whole home to a file.
+
+## On the inner screen
+
+- A **bar** in place of the status bar: app pairs on the left, the player in the middle, status and the clock on the right.
+- **App pairs**: two apps opened side by side in split screen, named, one tap from the bar.
+- A **control deck** pulled down from the top: toggles, flashlight, screenshot, lock, the player with volume and brightness, and notifications.
 
 ## Build
 
@@ -35,6 +78,9 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | Access | For |
 |---|---|
 | Home app | Making it your home screen |
-| Notification access | The player and notifications |
+| Notification access | The player, notifications and the rose bars |
 | Accessibility | Split screen and pairs, lock, screenshot, power menu |
 | Change system settings | Brightness and auto-rotate |
+| Set wallpaper | Setting the wallpaper it frosts for the glass |
+
+Contacts, calendar and location are only asked for when you turn on the feature that needs them.

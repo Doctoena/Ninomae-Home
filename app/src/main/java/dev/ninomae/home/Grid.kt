@@ -275,15 +275,10 @@ private fun HomeIcon(st: HomeState, label: String, badge: Boolean, modifier: Mod
     ) {
         Box {
             icon()
-            if (badge) {
-                Box(
-                    Modifier.align(Alignment.TopEnd).offset(3.dp, (-3).dp).size(13.dp).clip(CircleShape)
-                        .background(pal.l0).padding(2.dp).clip(CircleShape).background(pal.acc),
-                )
-            }
+            if (badge) NoteBar()
         }
         if (st.labels) {
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(10.dp))
             BasicText(
                 label,
                 Modifier.padding(horizontal = 2.dp),
@@ -536,7 +531,7 @@ private fun BigFolder(st: HomeState, ui: Ui, item: HomeItem, badged: Set<String>
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     AppIcon(app, 48.dp)
-                                    if (st.dots && app?.pkg in badged) Badge(Modifier.align(Alignment.TopEnd), 12.dp)
+                                    if (st.dots && app?.pkg in badged) NoteBar()
                                 }
                             }
                             repeat(cols - line.size) { Spacer(Modifier.size(56.dp)) }

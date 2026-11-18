@@ -1,5 +1,7 @@
 package dev.ninomae.home
 
+import androidx.compose.foundation.layout.offset
+
 import androidx.compose.ui.composed
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
@@ -173,3 +175,12 @@ fun Modifier.frosted(st: HomeState, shape: androidx.compose.ui.graphics.Shape, w
             .background(if (pic != null) pal.l0.copy(alpha = wash) else pal.l1.copy(alpha = 0.88f))
             .border(1.dp, Color.White.copy(alpha = edge), shape)
     }
+
+/** Unread notifications: a small rose bar just under an icon, the same everywhere (dock, home, folders, drawer). */
+@Composable
+fun androidx.compose.foundation.layout.BoxScope.NoteBar() {
+    Box(
+        Modifier.align(Alignment.BottomCenter).offset(y = 7.dp).size(16.dp, 4.dp)
+            .clip(RoundedCornerShape(2.dp)).background(LocalPal.current.acc),
+    )
+}

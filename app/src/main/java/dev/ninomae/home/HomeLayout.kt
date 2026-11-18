@@ -235,8 +235,8 @@ fun HomeState.removeFromFolder(folderId: String, key: String) {
     commit(home.filter { it.id != folderId } + listOfNotNull(next))
 }
 
-fun HomeState.addNinomaeWidget(kind: String, screen: Int, page: Int) {
-    val (w, h) = ninomaeSize(kind, screen)
+fun HomeState.addNinomaeWidget(kind: String, screen: Int, page: Int, size: Pair<Int, Int>? = null) {
+    val (w, h) = size ?: ninomaeSize(kind, screen)
     val (p, x, y) = firstFree(screen, w, h, page)
     commit(home + HomeItem(newId(), screen, p, x, y, w, h, type = "nwidget", kind = kind))
 }

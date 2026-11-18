@@ -422,9 +422,9 @@ private fun GlassTile(st: HomeState, ui: Ui, app: AppEntry, size: Dp, badged: Se
     ) {
         Box {
             GlassIcon(app, size)
-            if (st.dots && app.pkg in badged) Badge(Modifier.align(Alignment.TopEnd).offset(3.dp, (-3).dp), 13.dp)
+            if (st.dots && app.pkg in badged) NoteBar()
         }
-        Spacer(Modifier.height(7.dp))
+        Spacer(Modifier.height(10.dp))
         Lbl(app.label, Modifier.padding(horizontal = 2.dp), size = 12.sp, align = TextAlign.Center)
     }
 }

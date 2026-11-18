@@ -1,5 +1,6 @@
 package dev.ninomae.home
 
+import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -73,6 +74,8 @@ fun FolderPopup(st: HomeState, ui: Ui, progress: () -> Float, modifier: Modifier
     val pal = LocalPal.current
     val density = LocalDensity.current
     val folder = st.home.firstOrNull { it.id == ui.folderId && it.type == "folder" } ?: return
+    val notes by NotifService.notes.collectAsState()
+    val badged = remember(notes) { if (st.dots) notes.map { it.pkg }.toSet() else emptySet() }
     var adding by remember(folder.id) { mutableStateOf(false) }
     var full by remember(folder.id) { mutableStateOf(false) }
     LaunchedEffect(ui.inFolder) { if (!ui.inFolder) { adding = false; full = false } }
@@ -134,13 +137,13 @@ fun FolderPopup(st: HomeState, ui: Ui, progress: () -> Float, modifier: Modifier
                     GridCells.Fixed(4),
                     Modifier.heightIn(max = 380.dp).padding(horizontal = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) { items(folder.apps, key = { it }) { FolderTile(st, ui, folder, it) } }
+                ) { items(folder.apps, key = { it }) { FolderTile(st, ui, folder, it, badged) } }
                 else -> {
                     val pages = folder.apps.chunked(4)
                     val pager = rememberPagerState(pageCount = { pages.size })
                     HorizontalPager(pager, Modifier.fillMaxWidth().padding(horizontal = 4.dp)) { i ->
                         Row(Modifier.fillMaxWidth()) {
-                            pages[i].forEach { key -> Box(Modifier.weight(1f)) { FolderTile(st, ui, folder, key) } }
+                            pages[i].forEach { key -> Box(Modifier.weight(1f)) { FolderTile(st, ui, folder, key, badged) } }
                             repeat(4 - pages[i].size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
@@ -196,7 +199,7 @@ private fun PillPart(glyph: String, shape: androidx.compose.ui.graphics.Shape, t
 
 /** One app in a folder: tap to open, hold for its menu or to drag it out. */
 @Composable
-private fun FolderTile(st: HomeState, ui: Ui, folder: HomeItem, key: String) {
+private fun FolderTile(st: HomeState, ui: Ui, folder: HomeItem, key: String, badged: Set<String>) {
     val ctx = LocalContext.current
     val app = st.app(key)
     var rect by remember { mutableStateOf(Rect.Zero) }
@@ -215,8 +218,11 @@ private fun FolderTile(st: HomeState, ui: Ui, folder: HomeItem, key: String) {
             .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (app != null) GlassIcon(app, 56.dp) else AppIcon(null, 56.dp)
-        Spacer(Modifier.height(6.dp))
+        Box {
+            if (app != null) GlassIcon(app, 56.dp) else AppIcon(null, 56.dp)
+            if (app != null && app.pkg in badged) NoteBar()
+        }
+        Spacer(Modifier.height(10.dp))
         Lbl(app?.label ?: "Missing", Modifier.padding(horizontal = 2.dp), size = 12.sp, align = TextAlign.Center)
     }
 }
