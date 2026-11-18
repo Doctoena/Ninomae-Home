@@ -238,7 +238,7 @@ private fun ItemView(st: HomeState, ui: Ui, item: HomeItem, cw: Dp, ch: Dp, badg
                 Box(contentAlignment = Alignment.Center) {
                     FolderIcon(st, item, 56.dp)
                     // Lit while it's open, so you can see where the glass came from.
-                    if (ui.layer == Layer.Folder && ui.folderId == item.id) Box(
+                    if (ui.inFolder && ui.folderId == item.id) Box(
                         Modifier.requiredSize(66.dp).border(2.dp, LocalPal.current.acc, RoundedCornerShape(22.dp)),
                     )
                 }

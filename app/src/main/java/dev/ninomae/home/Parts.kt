@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -224,8 +223,3 @@ fun MiniSwitch(on: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Hairline between items of a strip. */
-@Composable
-fun Hair(modifier: Modifier = Modifier) {
-    Box(modifier.size(1.dp, 22.dp).background(LocalPal.current.line))
-}

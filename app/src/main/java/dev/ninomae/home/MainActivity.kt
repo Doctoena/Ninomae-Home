@@ -71,7 +71,7 @@ class MainActivity : ComponentActivity() {
             NinomaeTheme(st.colourSource, st.swatch, st.wallSeed) {
               androidx.compose.runtime.CompositionLocalProvider(LocalThemedIcons provides (st.iconStyle == 1)) {
                 // Home never closes on back; back only closes what's open.
-                BackHandler { if (ui.layer != Layer.None) ui.close() else ui.editing = false }
+                BackHandler { if (ui.layer != Layer.None) ui.back() else ui.editing = false }
                 Home(st, ui)
               }
             }

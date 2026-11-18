@@ -75,7 +75,7 @@ fun FolderPopup(st: HomeState, ui: Ui, progress: () -> Float, modifier: Modifier
     val folder = st.home.firstOrNull { it.id == ui.folderId && it.type == "folder" } ?: return
     var adding by remember(folder.id) { mutableStateOf(false) }
     var full by remember(folder.id) { mutableStateOf(false) }
-    LaunchedEffect(ui.layer) { if (ui.layer != Layer.Folder) { adding = false; full = false } }
+    LaunchedEffect(ui.inFolder) { if (!ui.inFolder) { adding = false; full = false } }
     // The folder's icon on screen, to grow from (and to light up, in the grid).
     val icon = Rect(
         ui.gridRect.left + folder.x * ui.cellW, ui.gridRect.top + folder.y * ui.cellH,

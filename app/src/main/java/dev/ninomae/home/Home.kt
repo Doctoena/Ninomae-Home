@@ -153,6 +153,23 @@ class Ui {
 
     fun close() {
         layer = Layer.None
+        menuParent = Layer.None
+    }
+
+    /** What a hold menu was opened over (the drawer or a folder), so it can close back to it. */
+    var menuParent by mutableStateOf(Layer.None)
+    private val menuOpen get() = layer == Layer.Menu || layer == Layer.PairMenu
+    /** The drawer is up: on its own, or under a menu opened from it. */
+    val inApps get() = layer == Layer.Apps || (menuOpen && menuParent == Layer.Apps)
+    /** A folder is open: on its own, or under a menu opened from it. */
+    val inFolder get() = layer == Layer.Folder || (menuOpen && menuParent == Layer.Folder)
+
+    /** Back or a tap outside: a menu over the drawer or a folder goes back to it, anything else closes. */
+    fun back() {
+        if (menuOpen && menuParent != Layer.None) {
+            layer = menuParent
+            menuParent = Layer.None
+        } else close()
     }
 
     fun toggle(l: Layer) {
@@ -163,6 +180,7 @@ class Ui {
         drag = hold
         dragPos = at
         layer = Layer.None
+        menuParent = Layer.None
     }
 
     fun showMenu(app: AppEntry, rect: Rect, above: Boolean, fromDock: Boolean, homeId: String? = null, folderId: String? = null) {
@@ -172,6 +190,7 @@ class Ui {
         menuFromDock = fromDock
         menuHomeId = homeId
         menuFolderId = folderId
+        menuParent = if (layer == Layer.Apps || layer == Layer.Folder) layer else Layer.None
         layer = Layer.Menu
     }
 
@@ -179,6 +198,7 @@ class Ui {
         pair = p
         anchor = rect
         this.above = above
+        menuParent = if (layer == Layer.Apps || layer == Layer.Folder) layer else Layer.None
         layer = Layer.PairMenu
     }
 
@@ -233,7 +253,7 @@ fun Home(st: HomeState, ui: Ui) {
             animate(ui.settings, if (ui.layer == Layer.Settings) 1f else 0f, animationSpec = spring(1f, 380f)) { v, _ -> ui.settings = v }
         }
         LaunchedEffect(ui.layer, ui.gesturing) {
-            if (!ui.gesturing) animate(ui.sheet, if (ui.layer == Layer.Apps) 1f else 0f, animationSpec = spring(1f, 380f)) { v, _ -> ui.sheet = v }
+            if (!ui.gesturing) animate(ui.sheet, if (ui.inApps) 1f else 0f, animationSpec = spring(1f, 380f)) { v, _ -> ui.sheet = v }
         }
 
         // Ninomae's bar or Samsung's status bar, chosen per screen in settings.
@@ -244,7 +264,7 @@ fun Home(st: HomeState, ui: Ui) {
         val open = ui.layer != Layer.None
         val floating = ui.layer == Layer.Menu || ui.layer == Layer.PairMenu
         val panel = open && !floating && ui.layer != Layer.Deck && ui.layer != Layer.Apps && ui.layer != Layer.Settings
-        val panelDim by animateFloatAsState(if (ui.layer == Layer.Folder) 0.22f else if (panel) 0.4f else if (floating) 0.18f else 0f, label = "dim")
+        val panelDim by animateFloatAsState(if (ui.inFolder) 0.22f else if (panel) 0.4f else if (floating) 0.18f else 0f, label = "dim")
         val dim = maxOf(panelDim, ui.deck * 0.72f, ui.sheet * 0.12f)
         // With the frosted wallpaper, the sheet hides the desktop outright, so it only needs blurring under the deck.
         val behind = maxOf(ui.deck, if (st.glass == null) ui.sheet else 0f)
@@ -273,7 +293,7 @@ fun Home(st: HomeState, ui: Ui) {
                 Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = dim))
-                    .then(if (open) Modifier.pointerInput(Unit) { detectTapGestures { ui.close() } } else Modifier),
+                    .then(if (open) Modifier.pointerInput(Unit) { detectTapGestures { ui.back() } } else Modifier),
             )
         }
 
@@ -295,7 +315,7 @@ fun Home(st: HomeState, ui: Ui) {
 
         // ---------- all apps: a sheet from the bottom ----------
         // ---------- all apps: full screen, on frosted glass ----------
-        if (ui.sheet > 0.001f || ui.layer == Layer.Apps) {
+        if (ui.sheet > 0.001f || ui.inApps) {
             Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))) {
                 Sheet(st, ui, compact, Modifier.fillMaxSize())
             }
@@ -322,7 +342,7 @@ fun Home(st: HomeState, ui: Ui) {
         }
 
         // ---------- an open folder: glass grown out of its icon ----------
-        val folderP by animateFloatAsState(if (ui.layer == Layer.Folder) 1f else 0f, spring(0.82f, 520f), label = "folder")
+        val folderP by animateFloatAsState(if (ui.inFolder) 1f else 0f, spring(0.82f, 520f), label = "folder")
         if (folderP > 0.001f) FolderPopup(st, ui, { folderP }, Modifier.fillMaxSize())
 
         // ---------- menus, grown out of what was held ----------

@@ -128,8 +128,8 @@ fun Sheet(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
     val iconSize = if (compact) 52.dp else 56.dp
 
     // Opening focuses search (keyboard up); closing clears it and goes back to Most used.
-    LaunchedEffect(ui.layer) {
-        if (ui.layer == Layer.Apps) {
+    LaunchedEffect(ui.inApps) {
+        if (ui.inApps) {
             runCatching { focus.requestFocus() }
             keyboard?.show()
         } else {
