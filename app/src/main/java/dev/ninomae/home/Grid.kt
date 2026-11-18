@@ -1,5 +1,7 @@
 package dev.ninomae.home
 
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.gestures.detectDragGestures
 import android.accessibilityservice.AccessibilityService
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
@@ -13,7 +15,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -77,7 +78,8 @@ fun HomeGrid(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
         ui.screen = screen
         st.lastScreen = screen
     }
-    LaunchedEffect(pager.currentPage) { ui.page = pager.currentPage }
+    LaunchedEffect(pager.currentPage) { ui.page = pager.currentPage; ui.selected = null }
+    LaunchedEffect(ui.editing) { if (!ui.editing) ui.selected = null }
     // The wallpaper drifts a little as you turn pages.
     val view = androidx.compose.ui.platform.LocalView.current
     val ctx = LocalContext.current
@@ -129,7 +131,7 @@ fun HomeGrid(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
             }
             HorizontalPager(pager, Modifier.fillMaxSize(), userScrollEnabled = !dragging, beyondViewportPageCount = 1) { page ->
                 Box(Modifier.fillMaxSize().desktopGestures(st, ui)) {
-                    if (ui.editing) EditCells(cols, rows, cw, ch)
+                    if (ui.editing) EditDots(cols, rows, cw, ch)
                     st.home.filter { it.screen == screen && it.page == page }.forEach { item ->
                         key(item.id) { ItemView(st, ui, item, cw, ch, badged) }
                     }
@@ -154,7 +156,7 @@ private fun Modifier.desktopGestures(st: HomeState, ui: Ui): Modifier = composed
                     if (st.locked) android.widget.Toast.makeText(ctx, "The home screen is locked. Unlock it in settings.", android.widget.Toast.LENGTH_SHORT).show()
                     else ui.editing = true
                 },
-                onTap = { if (ui.editing) ui.editing = false },
+                onTap = { if (ui.editing) { if (ui.selected != null) ui.selected = null else ui.editing = false } },
             )
         }
         .pointerInput(Unit) {
@@ -232,7 +234,15 @@ private fun ItemView(st: HomeState, ui: Ui, item: HomeItem, cw: Dp, ch: Dp, badg
                 st, item.name.ifBlank { "Folder" },
                 st.dots && item.apps.any { st.app(it)?.pkg in badged },
                 Modifier.holdable(onTap = { if (!ui.editing) ui.openFolder(item.id) }, onHold = hold),
-            ) { FolderIcon(st, item, 56.dp) }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    FolderIcon(st, item, 56.dp)
+                    // Lit while it's open, so you can see where the glass came from.
+                    if (ui.layer == Layer.Folder && ui.folderId == item.id) Box(
+                        Modifier.requiredSize(66.dp).border(2.dp, LocalPal.current.acc, RoundedCornerShape(22.dp)),
+                    )
+                }
+            }
             "shortcut" -> {
                 val info = remember(item.shortcutId) { Shortcuts.find(ctx, item.pkg, item.shortcutId, item.userSerial) }
                 val icon = remember(info) { info?.let { Shortcuts.icon(ctx, it) } }
@@ -251,7 +261,7 @@ private fun ItemView(st: HomeState, ui: Ui, item: HomeItem, cw: Dp, ch: Dp, badg
             "nwidget" -> NinomaeWidget(st, ui, item.kind)
             "stack" -> WidgetStack(st, ui, item, cw.value * item.w - 8, ch.value * item.h - 8)
         }
-        if (ui.editing) EditOverlay(st, ui, item, hold)
+        if (ui.editing) EditLayer(st, ui, item, cw, ch, hold)
     }
 }
 
@@ -295,72 +305,97 @@ private fun HomeIcon(st: HomeState, label: String, badge: Boolean, modifier: Mod
 @Composable
 fun FolderIcon(st: HomeState, item: HomeItem, size: Dp) {
     val pal = LocalPal.current
+    val shape = RoundedCornerShape(size * 0.33f)
+    val apps = item.apps.take(4).map { st.app(it) }
+    // Two apps side by side, bigger; three or four in a 2 × 2, all centred in a glass square.
+    val cell = if (apps.size <= 2) size * 0.4f else size * 0.33f
+    val gap = size * 0.06f
+    // Frosted like the dock: the blurred wallpaper behind it reads clearly against the sharp one around it.
     Box(
-        Modifier.size(size).clip(RoundedCornerShape(size * 0.3f)).background(pal.l3.copy(alpha = 0.92f))
-            .border(1.dp, pal.fg.copy(alpha = 0.12f), RoundedCornerShape(size * 0.3f))
-            .padding(size * 0.14f),
+        Modifier.size(size).frosted(st, shape, wash = 0.34f, edge = 0.26f),
+        contentAlignment = Alignment.Center,
     ) {
-        val apps = item.apps.take(4).map { st.app(it) }
-        val s = size * 0.33f
-        apps.forEachIndexed { i, a ->
-            AppIcon(a, s, Modifier.offset(if (i % 2 == 0) 0.dp else s + size * 0.06f, if (i < 2) 0.dp else s + size * 0.06f))
-        }
-    }
-}
-
-@Composable
-private fun EditOverlay(st: HomeState, ui: Ui, item: HomeItem, hold: (Offset) -> Unit) {
-    val pal = LocalPal.current
-    Box(Modifier.fillMaxSize()) {
-        if (item.resizable) {
-            Box(
-                Modifier.fillMaxSize()
-                    .border(1.5.dp, pal.acc, RoundedCornerShape(Rad.normal))
-                    .clip(RoundedCornerShape(Rad.normal))
-                    .background(pal.acc.copy(alpha = 0.08f))
-                    .holdable(onTap = {}, onHold = hold),
-            )
-            if (item.w == 1 && item.h == 1) {
-                // One cell has no room for four arrows: one button makes it big.
-                EditButton("open_in_full", Modifier.align(Alignment.BottomEnd).padding(4.dp)) { st.resize(item.id, 1, 1) }
-            } else Row(
-                Modifier.align(Alignment.BottomEnd).padding(6.dp),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                EditButton("keyboard_arrow_left") { st.resize(item.id, -1, 0) }
-                EditButton("keyboard_arrow_right") { st.resize(item.id, 1, 0) }
-                EditButton("keyboard_arrow_up") { st.resize(item.id, 0, -1) }
-                EditButton("keyboard_arrow_down") { st.resize(item.id, 0, 1) }
-                if (item.type == "stack") {
-                    EditButton("layers_clear") {
-                        val i = (ui.stackPage[item.id] ?: 0).coerceIn(0, item.apps.lastIndex)
-                        st.unstack(item.id, item.apps[i])
-                    }
+        Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+            apps.chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    row.forEach { a -> if (a != null) GlassIcon(a, cell) else AppIcon(null, cell) }
                 }
             }
         }
-        EditButton("close", Modifier.align(Alignment.TopEnd).offset(4.dp, (-4).dp)) { st.removeItem(item.id) }
     }
 }
 
+/**
+ * Edit mode on one item (E2b): a faint outline until you tap it; tapped, it lights up with handles on
+ * its edges to drag to a new size, and the bottom bar turns into its card. Hold still drags it.
+ */
 @Composable
-private fun EditButton(glyph: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun EditLayer(st: HomeState, ui: Ui, item: HomeItem, cw: Dp, ch: Dp, hold: (Offset) -> Unit) {
     val pal = LocalPal.current
+    val sel = ui.selected == item.id
+    val other = ui.selected != null && !sel
+    val shape = RoundedCornerShape(Rad.normal + 4.dp)
     Box(
-        modifier.size(28.dp).clip(RoundedCornerShape(9.dp)).background(pal.l4)
-            .border(1.dp, pal.fg.copy(alpha = 0.12f), RoundedCornerShape(9.dp)).clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) { Glyph(glyph, size = 18.dp) }
+        Modifier.fillMaxSize()
+            .then(
+                if (sel) Modifier.border(2.dp, pal.acc, shape).clip(shape).background(pal.acc.copy(alpha = 0.08f))
+                else Modifier.border(1.5.dp, Color.White.copy(alpha = if (other) 0.15f else 0.38f), shape),
+            )
+            .holdable(onTap = { ui.selected = if (sel) null else item.id }, onHold = hold),
+    )
+    if (sel && item.resizable) {
+        val density = LocalDensity.current
+        val cwPx = with(density) { cw.toPx() }
+        val chPx = with(density) { ch.toPx() }
+        Box(Modifier.fillMaxSize()) {
+            EdgeHandle(Modifier.align(Alignment.TopCenter), Alignment.TopCenter, false, chPx) { d -> st.reshape(item.id, 0, d, 0, -d) }
+            EdgeHandle(Modifier.align(Alignment.BottomCenter), Alignment.BottomCenter, false, chPx) { d -> st.reshape(item.id, 0, 0, 0, d) }
+            EdgeHandle(Modifier.align(Alignment.CenterStart), Alignment.CenterStart, true, cwPx) { d -> st.reshape(item.id, d, 0, -d, 0) }
+            EdgeHandle(Modifier.align(Alignment.CenterEnd), Alignment.CenterEnd, true, cwPx) { d -> st.reshape(item.id, 0, 0, d, 0) }
+        }
+    }
 }
 
+/**
+ * A glowing bar on one edge of the picked item. Dragging it steps the size a cell at a time
+ * ([onStep] gets +1 or -1 along its axis, + meaning right or down).
+ */
 @Composable
-private fun EditCells(cols: Int, rows: Int, cw: Dp, ch: Dp) {
+private fun EdgeHandle(modifier: Modifier, side: Alignment, vertical: Boolean, cellPx: Float, onStep: (Int) -> Unit) {
     val pal = LocalPal.current
-    for (x in 0 until cols) for (y in 0 until rows) {
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    Box(
+        modifier
+            // The touch area stays inside the item (touches outside a layout never reach it).
+            .size(if (vertical) 36.dp else 72.dp, if (vertical) 72.dp else 36.dp)
+            .pointerInput(cellPx) {
+                var acc = 0f
+                detectDragGestures(onDragStart = { acc = 0f }) { c, d ->
+                    c.consume()
+                    acc += if (vertical) d.x else d.y
+                    val step = cellPx * 0.6f
+                    while (acc > step) { acc -= cellPx; onStep(1); haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove) }
+                    while (acc < -step) { acc += cellPx; onStep(-1); haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove) }
+                }
+            },
+        contentAlignment = side,
+    ) {
         Box(
-            Modifier.offset(cw * x, ch * y).size(cw, ch).padding(6.dp)
-                .clip(RoundedCornerShape(Rad.container)).background(pal.fg.copy(alpha = 0.05f)),
-        )
+            Modifier.offset(
+                x = if (side == Alignment.CenterStart) (-7).dp else if (side == Alignment.CenterEnd) 7.dp else 0.dp,
+                y = if (side == Alignment.TopCenter) (-7).dp else if (side == Alignment.BottomCenter) 7.dp else 0.dp,
+            ).size(if (vertical) 14.dp else 42.dp, if (vertical) 42.dp else 14.dp).clip(RoundedCornerShape(7.dp))
+                .background(pal.acc.copy(alpha = 0.25f)),
+            contentAlignment = Alignment.Center,
+        ) { Box(Modifier.size(if (vertical) 6.dp else 34.dp, if (vertical) 34.dp else 6.dp).clip(RoundedCornerShape(3.dp)).background(pal.acc)) }
+    }
+}
+
+/** Edit mode's grid: small dots where cells meet, instead of boxes over everything. */
+@Composable
+private fun EditDots(cols: Int, rows: Int, cw: Dp, ch: Dp) {
+    for (x in 1 until cols) for (y in 1 until rows) {
+        Box(Modifier.offset(cw * x - 2.dp, ch * y - 2.dp).size(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.35f)))
     }
 }
 
@@ -440,7 +475,7 @@ fun NinomaeWidget(st: HomeState, ui: Ui, kind: String) {
                 Lbl("Apps you open show up here", Modifier.align(Alignment.Center), size = 13.sp, color = pal.sub)
             } else JumpBack(st, items, all)
         }
-        "clock" -> ClockPieces()
+        "clock" -> ClockSlab(st)
     }
 }
 
@@ -514,73 +549,76 @@ private fun BigFolder(st: HomeState, ui: Ui, item: HomeItem, badged: Set<String>
 }
 
 /**
- * C · Pieces: the clock as joined pieces like the bar. The time fills its piece at any size,
- * and under it the date and one accent fact (the temperature when weather is on, else battery).
+ * The clock (S3 · Slab + agenda): one pane of frosted glass. The time and date on the left; on the
+ * right a little joined agenda of what's next: calendar event, alarm, weather. Anything missing drops
+ * out, and with nothing to show the time has the slab to itself. No battery: the user doesn't want it.
  */
 @Composable
-private fun ClockPieces() {
+private fun ClockSlab(st: HomeState) {
     val pal = LocalPal.current
     val ctx = LocalContext.current
     val now = rememberNow()
+    val ev = Glance.event
     val w = Glance.weather
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    // Android shares the next alarm with any app; read it again each minute.
+    val alarm = remember(now.minute) {
+        ctx.getSystemService(android.app.AlarmManager::class.java)?.nextAlarmClock?.triggerTime
+    }
+    BoxWithConstraints(Modifier.fillMaxSize().frosted(st, RoundedCornerShape(30.dp), wash = 0.32f, edge = 0.24f)) {
         val wide = maxWidth > 300.dp
-        val rowH = if (maxHeight < 110.dp) 30.dp else 36.dp
-        val timeH = maxHeight - rowH - 4.dp
-        val big = 20.dp
-        val j = Rad.joined
-        // As big as the piece allows: limited by its height, and by its width for four digits.
-        val timeSize = with(LocalDensity.current) { minOf(timeH * 0.62f, maxWidth * 0.3f).toSp() }
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Piece(
-                Modifier.fillMaxWidth().height(timeH),
-                corners(big, big, j, j),
-                pal.l3.copy(alpha = 0.92f),
-                edge = true,
-                onClick = { Actions.clock(ctx) },
-            ) {
-                BasicText(
-                    clockText(now),
-                    Modifier.align(Alignment.Center),
-                    style = TextStyle(color = pal.fg, fontSize = timeSize, fontFamily = TitleFont, fontWeight = FontWeight.Black),
-                    maxLines = 1,
-                )
+        val agendaW = if (wide) 150.dp else 100.dp
+        val lines = buildList {
+            if (ev != null) add(AgendaLine("event", ev.title, if (wide) ev.whenText else ev.whenText.substringBefore(' '), false) { Actions.calendar(ctx) })
+            if (alarm != null) {
+                val at = java.time.Instant.ofEpochMilli(alarm).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
+                val time = android.text.format.DateFormat.getTimeFormat(ctx).format(java.util.Date(alarm))
+                val soon = java.time.Duration.between(now, at).toHours() < 20
+                add(AgendaLine("alarm", if (wide) "Alarm" else time, if (wide) (if (soon) time else at.format(DateTimeFormatter.ofPattern("EEE ")) + time) else "", false) { Actions.clock(ctx) })
             }
-            Row(Modifier.fillMaxWidth().height(rowH), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Piece(
-                    Modifier.weight(0.62f).fillMaxHeight(),
-                    corners(j, j, j, big),
-                    pal.l3.copy(alpha = 0.92f),
-                    edge = true,
-                    onClick = { Actions.calendar(ctx) },
+            if (w != null) add(AgendaLine(w.glyph, if (wide) "${w.temp} ${w.text}" else w.temp, "", true) {})
+        }
+        val showAgenda = lines.isNotEmpty() && maxWidth > 200.dp
+        val leftW = if (showAgenda) maxWidth - agendaW - 12.dp else maxWidth
+        val timeSize = with(LocalDensity.current) { minOf(maxHeight * 0.48f, leftW * 0.3f).toSp() }
+        Column(
+            Modifier.align(if (showAgenda) Alignment.CenterStart else Alignment.Center).width(leftW).padding(start = if (showAgenda) 20.dp else 0.dp),
+            horizontalAlignment = if (showAgenda) Alignment.Start else Alignment.CenterHorizontally,
+        ) {
+            BasicText(
+                clockText(now),
+                Modifier.clip(RoundedCornerShape(12.dp)).clickable { Actions.clock(ctx) },
+                style = TextStyle(color = pal.fg, fontSize = timeSize, fontFamily = TitleFont, fontWeight = FontWeight.Black),
+                maxLines = 1,
+            )
+            Lbl(
+                now.format(DateTimeFormatter.ofPattern(if (wide) "EEEE d MMMM" else "EEE d MMM")),
+                Modifier.padding(start = 3.dp).clip(RoundedCornerShape(8.dp)).clickable { Actions.calendar(ctx) },
+                size = 13.sp, color = pal.sub,
+            )
+        }
+        if (showAgenda) Column(
+            Modifier.align(Alignment.CenterEnd).padding(end = 12.dp).width(agendaW),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            lines.forEachIndexed { i, l ->
+                val t = if (i == 0) 14.dp else 5.dp
+                val b = if (i == lines.lastIndex) 14.dp else 5.dp
+                Row(
+                    Modifier.fillMaxWidth().height(30.dp).clip(corners(t, t, b, b)).background(Color.White.copy(alpha = 0.08f))
+                        .clickable(onClick = l.go).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Lbl(
-                        now.format(DateTimeFormatter.ofPattern(if (wide) "EEEE d MMMM" else "EEE d MMM")),
-                        Modifier.align(Alignment.Center).padding(horizontal = 8.dp),
-                        size = 13.sp, weight = FontWeight.SemiBold,
-                    )
-                }
-                Piece(
-                    Modifier.weight(0.38f).fillMaxHeight(),
-                    corners(j, j, big, j),
-                    pal.acc,
-                    onClick = { Actions.battery(ctx) },
-                ) {
-                    Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
-                        if (w != null) {
-                            Glyph(w.glyph, size = 16.dp, color = pal.ink, fill = true)
-                            Spacer(Modifier.width(4.dp))
-                            Num(w.temp, size = 13.sp, color = pal.ink)
-                        } else {
-                            if (Status.charging) {
-                                Glyph("bolt", size = 15.dp, color = pal.ink, fill = true)
-                                Spacer(Modifier.width(2.dp))
-                            }
-                            Num("${Status.battery}%", size = 13.sp, color = pal.ink)
-                        }
+                    Glyph(l.glyph, size = 15.dp, color = pal.acc, fill = l.fill)
+                    Spacer(Modifier.width(6.dp))
+                    Lbl(l.text, Modifier.weight(1f, fill = false), size = 12.sp)
+                    if (l.note.isNotEmpty()) {
+                        Spacer(Modifier.width(5.dp))
+                        Lbl(l.note, size = 11.sp, color = pal.sub)
                     }
                 }
             }
         }
     }
 }
+
+private class AgendaLine(val glyph: String, val text: String, val note: String, val fill: Boolean, val go: () -> Unit)

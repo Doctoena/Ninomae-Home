@@ -199,6 +199,17 @@ fun HomeState.resize(id: String, dw: Int, dh: Int) {
     if (fits(it.screen, it.page, it.x, it.y, w, h, ignore = id)) commit(home.map { i -> if (i.id == id) i.copy(w = w, h = h) else i })
 }
 
+/** Move an item's edges: [dx]/[dy] shift its corner, [dw]/[dh] change its size. Only if it still fits. */
+fun HomeState.reshape(id: String, dx: Int, dy: Int, dw: Int, dh: Int) {
+    val it = home.firstOrNull { i -> i.id == id } ?: return
+    val x = it.x + dx
+    val y = it.y + dy
+    val w = it.w + dw
+    val h = it.h + dh
+    if (w < 1 || h < 1 || x < 0 || y < 0 || x + w > gridCols(it.screen) || y + h > gridRows(it.screen)) return
+    if (fits(it.screen, it.page, x, y, w, h, ignore = id)) commit(home.map { i -> if (i.id == id) i.copy(x = x, y = y, w = w, h = h) else i })
+}
+
 /** Drop [key] onto [target]: two apps make a folder, an app joins a folder. */
 fun HomeState.mergeInto(target: HomeItem, key: String, removeId: String?) {
     val rest = home.filter { it.id != removeId && it.id != target.id }

@@ -47,6 +47,8 @@ data class AppEntry(
     /** The app's monochrome layer, for themed icons. */
     val mono: ImageBitmap? = null,
     val installed: Long = 0,
+    /** Android's category for the app (ApplicationInfo.CATEGORY_*), for the drawer's groups. */
+    val category: Int = -1,
 )
 
 data class AppPair(val id: String, val name: String, val left: String, val right: String)
@@ -96,6 +98,21 @@ class HomeState private constructor(private val ctx: Context) {
         private set
     var dots by mutableStateOf(prefs.getBoolean("dots", true))
         private set
+    /** The wallpaper, blurred, for the glass drawer (only when it was set from Ninomae). */
+    var glass by mutableStateOf(Glass.load(ctx))
+        private set
+    var wallPreview by mutableStateOf(Glass.loadPreview(ctx))
+        private set
+    /** The main colour of the wallpaper set from Ninomae (0 = none), used when Android won't share one. */
+    var wallSeed by mutableIntStateOf(prefs.getInt("wallSeed", 0))
+        private set
+
+    fun setWallpaper(w: Glass.Set) {
+        glass = w.frosted
+        wallPreview = w.preview
+        wallSeed = w.seed
+        prefs.edit().putInt("wallSeed", w.seed).apply()
+    }
     var dockRecentsOn by mutableStateOf(prefs.getBoolean("dockRecents", true))
         private set
     /** 0 sidebar, 1 Samsung's notification panel, 2 nothing. */
@@ -218,7 +235,9 @@ class HomeState private constructor(private val ctx: Context) {
                 .toBitmap(px, px, Bitmap.Config.ARGB_8888)
             val installed = runCatching { ctx.packageManager.getPackageInfo(info.componentName.packageName, 0).firstInstallTime }.getOrDefault(0L)
             // Samsung hands launchers flattened icons; the app's own resource still has its monochrome layer.
-            val mono = Icons.monochrome(own, px) ?: Icons.rawIcon(ctx, info)?.let { Icons.monochrome(it, px) }
+            val raw = Icons.rawIcon(ctx, info)
+            val mono = Icons.monochrome(own, px) ?: raw?.let { Icons.monochrome(it, px) }
+                ?: Icons.autoMonochrome(raw ?: own, px)
             Rendered(stamp, drawn.asImageBitmap(), averageColour(drawn), mono?.asImageBitmap(), installed)
                 .also { rendered[key] = it }
         }
@@ -234,6 +253,7 @@ class HomeState private constructor(private val ctx: Context) {
             isGame = info.applicationInfo.category == ApplicationInfo.CATEGORY_GAME,
             mono = r.mono,
             installed = r.installed,
+            category = info.applicationInfo.category,
         )
     }
 

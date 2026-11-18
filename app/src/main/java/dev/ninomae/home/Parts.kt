@@ -160,34 +160,6 @@ fun Cover(art: ImageBitmap?, size: Dp, modifier: Modifier = Modifier) {
     }
 }
 
-/** Accent squircle behind the icon = on (QuickDialogIcon). */
-@Composable
-fun SqIcon(name: String, lit: Boolean, size: Dp = 32.dp) {
-    val pal = LocalPal.current
-    Box(
-        Modifier.size(size).clip(RoundedCornerShape(Rad.segment)).background(if (lit) pal.acc else pal.l5),
-        contentAlignment = Alignment.Center,
-    ) {
-        Glyph(name, size = size * 0.56f, color = if (lit) pal.ink else pal.fg, fill = lit)
-    }
-}
-
-@Composable
-fun Seg(text: String, chosen: Boolean, onClick: () -> Unit) {
-    val pal = LocalPal.current
-    Box(
-        Modifier
-            .height(30.dp)
-            .clip(RoundedCornerShape(Rad.segment))
-            .background(if (chosen) pal.acc else pal.l5)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Lbl(text, size = 13.sp, color = if (chosen) pal.ink else pal.fg, weight = if (chosen) FontWeight.SemiBold else FontWeight.Normal)
-    }
-}
-
 @Composable
 fun AccentButton(text: String, enabled: Boolean = true, height: Dp = 34.dp, onClick: () -> Unit) {
     val pal = LocalPal.current

@@ -13,6 +13,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val ui = Ui()
@@ -40,6 +42,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val pickWallpaper = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri ?: return@registerForActivityResult
+        Toast.makeText(this, "Setting your wallpaper…", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch {
+            val set = Glass.setWallpaper(this@MainActivity, uri)
+            if (set != null) st.setWallpaper(set)
+            Toast.makeText(this@MainActivity, if (set != null) "Wallpaper set" else "Couldn't set that picture", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -53,9 +65,10 @@ class MainActivity : ComponentActivity() {
         AppWidgets.init(this)
         ui.askPermissions = { permissions.launch(it) }
         ui.backup = { saveBackup.launch("ninomae-home-${java.time.LocalDate.now()}.json") }
+        ui.pickWallpaper = { pickWallpaper.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
         ui.restore = { openBackup.launch(arrayOf("application/json", "text/plain", "*/*")) }
         setContent {
-            NinomaeTheme(st.colourSource, st.swatch) {
+            NinomaeTheme(st.colourSource, st.swatch, st.wallSeed) {
               androidx.compose.runtime.CompositionLocalProvider(LocalThemedIcons provides (st.iconStyle == 1)) {
                 // Home never closes on back; back only closes what's open.
                 BackHandler { if (ui.layer != Layer.None) ui.close() else ui.editing = false }

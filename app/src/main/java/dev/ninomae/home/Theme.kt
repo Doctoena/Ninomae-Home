@@ -68,12 +68,13 @@ private fun palOf(s: ColorScheme, dark: Boolean) = Pal(
 )
 
 @Composable
-fun NinomaeTheme(source: Int, swatch: Int, content: @Composable () -> Unit) {
+fun NinomaeTheme(source: Int, swatch: Int, wallSeed: Int = 0, content: @Composable () -> Unit) {
     val ctx = LocalContext.current
     val dark = isSystemInDarkTheme()
     // 1: the wallpaper's colour when Android shares it, otherwise the swatch; 2: the swatch; 0: Samsung's palette.
     val wall = if (source == 1) rememberWallpaperSeed() else null
-    val seed = when (source) { 1 -> wall ?: swatch; 2 -> swatch; else -> null }
+    // Android's wallpaper colour, else the one worked out from a wallpaper set here, else the swatch.
+    val seed = when (source) { 1 -> wall ?: wallSeed.takeIf { it != 0 } ?: swatch; 2 -> swatch; else -> null }
     val pal = if (seed != null) remember(seed, dark) { palFromSeed(seed, dark) } else {
         val scheme = if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
         remember(scheme, dark) { palOf(scheme, dark) }

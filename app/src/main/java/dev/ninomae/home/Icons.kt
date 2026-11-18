@@ -99,4 +99,63 @@ object Icons {
         mono.draw(Canvas(bmp))
         return bmp
     }
+
+    /**
+     * A monochrome layer made up for apps that don't ship one (Uber, banking apps, older apps), so
+     * themed icons cover everything. An adaptive icon gives its foreground (the logo); anything
+     * else, or a foreground that fills the whole icon, is read against its own background colour.
+     */
+    fun autoMonochrome(icon: Drawable, px: Int): Bitmap? = runCatching {
+        val src = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(src)
+        val fg = (icon as? AdaptiveIconDrawable)?.foreground
+        if (fg != null) {
+            val pad = px / 4
+            fg.setBounds(-pad, -pad, px + pad, px + pad)
+            fg.draw(canvas)
+            if (coverage(src) < 0.7f) return@runCatching alphaMask(src)
+            src.eraseColor(0)
+        }
+        icon.setBounds(0, 0, px, px)
+        icon.draw(canvas)
+        contrastMask(src)
+    }.getOrNull()
+
+    private fun coverage(b: Bitmap): Float {
+        val px = IntArray(b.width * b.height)
+        b.getPixels(px, 0, b.width, 0, 0, b.width, b.height)
+        return px.count { (it ushr 24) > 128 }.toFloat() / px.size
+    }
+
+    private fun alphaMask(b: Bitmap): Bitmap = b.extractAlpha()
+
+    /** The logo as whatever differs from the icon's background colour (sampled on a ring inside its edge). */
+    private fun contrastMask(b: Bitmap): Bitmap {
+        val w = b.width
+        val h = b.height
+        val px = IntArray(w * h)
+        b.getPixels(px, 0, w, 0, 0, w, h)
+        var r = 0L; var g = 0L; var bl = 0L; var n = 0
+        val inset = (w * 0.2f).toInt()
+        for (i in inset until w - inset step 2) {
+            for (p in intArrayOf(px[inset * w + i], px[(h - 1 - inset) * w + i], px[i * w + inset], px[i * w + w - 1 - inset])) {
+                if ((p ushr 24) < 200) continue
+                r += (p shr 16) and 255; g += (p shr 8) and 255; bl += p and 255; n++
+            }
+        }
+        if (n == 0) return b.extractAlpha()
+        val br = (r / n).toInt(); val bg = (g / n).toInt(); val bb = (bl / n).toInt()
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ALPHA_8)
+        val alphas = IntArray(w * h)
+        for (i in px.indices) {
+            val p = px[i]
+            val a = (p ushr 24) / 255f
+            val d = (kotlin.math.abs(((p shr 16) and 255) - br) + kotlin.math.abs(((p shr 8) and 255) - bg) + kotlin.math.abs((p and 255) - bb)) / 765f
+            val v = ((d - 0.06f) / 0.22f).coerceIn(0f, 1f) * a
+            alphas[i] = ((v * 255).toInt() shl 24)
+        }
+        val argb = Bitmap.createBitmap(alphas, w, h, Bitmap.Config.ARGB_8888)
+        Canvas(out).drawBitmap(argb, 0f, 0f, null)
+        return out
+    }
 }
