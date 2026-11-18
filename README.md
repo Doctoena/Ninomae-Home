@@ -1,6 +1,8 @@
 # Ninomae Home
 
-An Android home screen for the **Galaxy Z Fold 7**, in the look of the [Ninomae shell](https://github.com/Doctoena/Ninomae-Shell): rounded squircles, joined pieces, frosted glass, and colours taken from your wallpaper. The cover screen gets a phone layout. The inner screen gets a desktop one, with a bar, a dock and app pairs.
+An Android home screen for **any phone**, in the look of the [Ninomae shell](https://github.com/Doctoena/Ninomae-Shell): rounded squircles, joined pieces, frosted glass, and colours taken from your wallpaper.
+
+It also has **foldable support**. On a foldable like the Galaxy Z Fold, the cover screen gets the phone layout and the big inner screen gets a desktop one, with a bar, a dock and app pairs. Each screen keeps its own grid and settings.
 
 <p align="center">
   <img src="docs/screenshots/home.jpg" width="250" alt="Home screen: a frosted clock, glass folders and a glass dock over the wallpaper">
@@ -8,7 +10,7 @@ An Android home screen for the **Galaxy Z Fold 7**, in the look of the [Ninomae 
   <img src="docs/screenshots/menu.jpg" width="250" alt="Holding an app on the dock: its shortcuts and actions">
 </p>
 
-*Screenshots are from the cover screen.*
+*Screenshots are from a phone-sized screen (a Galaxy Z Fold 7's cover screen).*
 
 ## Frosted glass
 
@@ -60,7 +62,10 @@ Samsung turns off Android's window blur, and Android won't let apps read your wa
 - **At a glance**: your next calendar event, and the weather if you turn it on (Open-Meteo, rough location only).
 - **Backup and restore** your whole home to a file.
 
-## On the inner screen
+## On big and unfolded screens
+
+On a tablet-sized screen, like a foldable's inner screen, the layout becomes a desktop:
+
 
 - A **bar** in place of the status bar: app pairs on the left, the player in the middle, status and the clock on the right.
 - **App pairs**: two apps opened side by side in split screen, named, one tap from the bar.
