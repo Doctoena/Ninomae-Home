@@ -1,8 +1,8 @@
 package dev.ninomae.home
 
+import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.foundation.layout.offset
 
-import androidx.compose.ui.composed
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.layout.positionInRoot
@@ -27,7 +27,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -148,33 +147,66 @@ fun Dot(modifier: Modifier = Modifier, size: Dp = 9.dp) {
  * lined up with where the wallpaper really is behind it, then a wash and a faint edge. Without a
  * frosted copy (wallpaper not picked in Ninomae) it's a plain dark piece.
  */
-fun Modifier.frosted(st: HomeState, shape: androidx.compose.ui.graphics.Shape, wash: Float = 0.30f, edge: Float = 0.22f): Modifier =
-    composed {
-        val pal = LocalPal.current
-        val view = androidx.compose.ui.platform.LocalView.current
-        var origin by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(Offset.Zero) }
-        val pic = st.glass
-        this
-            .onGloballyPositioned { origin = it.positionInRoot() }
-            .clip(shape)
-            .drawBehind {
-                if (pic != null) {
-                    val sw = view.width.toFloat()
-                    val sh = view.height.toFloat()
-                    val k = maxOf(sw / pic.width, sh / pic.height)
-                    val dw = pic.width * k
-                    val dh = pic.height * k
-                    drawImage(
-                        pic,
-                        dstOffset = androidx.compose.ui.unit.IntOffset(((sw - dw) / 2 - origin.x).toInt(), ((sh - dh) / 2 - origin.y).toInt()),
-                        dstSize = androidx.compose.ui.unit.IntSize(dw.toInt(), dh.toInt()),
-                        filterQuality = FilterQuality.High,
-                    )
-                }
-            }
-            .background(if (pic != null) pal.l0.copy(alpha = wash) else pal.l1.copy(alpha = 0.88f))
-            .border(1.dp, Color.White.copy(alpha = edge), shape)
+@Composable
+fun Modifier.frosted(st: HomeState, shape: androidx.compose.ui.graphics.Shape, wash: Float = 0.30f, edge: Float = 0.22f): Modifier {
+    val pal = LocalPal.current
+    val pic = st.glass
+    val tint = if (pic != null) pal.l0.copy(alpha = wash) else pal.l1.copy(alpha = 0.88f)
+    return this.clip(shape)
+        .then(FrostElement(pic, tint, androidx.compose.ui.platform.LocalView.current))
+        .border(1.dp, Color.White.copy(alpha = edge), shape)
+}
+
+/** Draws the frosted wallpaper copy at the screen position of the piece, then the wash. A node, so it costs no composition. */
+private data class FrostElement(val pic: androidx.compose.ui.graphics.ImageBitmap?, val tint: Color, val view: android.view.View) :
+    androidx.compose.ui.node.ModifierNodeElement<FrostNode>() {
+    override fun create() = FrostNode(pic, tint, view)
+    override fun update(node: FrostNode) {
+        node.pic = pic; node.tint = tint; node.view = view
+        node.invalidateDraw()
     }
+}
+
+private class FrostNode(var pic: androidx.compose.ui.graphics.ImageBitmap?, var tint: Color, var view: android.view.View) :
+    Modifier.Node(), androidx.compose.ui.node.DrawModifierNode, androidx.compose.ui.node.GlobalPositionAwareModifierNode {
+    private var origin = Offset.Zero
+
+    override fun onGloballyPositioned(coordinates: androidx.compose.ui.layout.LayoutCoordinates) {
+        val o = coordinates.positionInRoot()
+        if (o != origin) { origin = o; if (pic != null) invalidateDraw() }
+    }
+
+    override fun androidx.compose.ui.graphics.drawscope.ContentDrawScope.draw() {
+        pic?.let { p ->
+            val sw = view.width.toFloat()
+            val sh = view.height.toFloat()
+            val k = maxOf(sw / p.width, sh / p.height)
+            val dw = p.width * k
+            val dh = p.height * k
+            drawImage(
+                p,
+                dstOffset = androidx.compose.ui.unit.IntOffset(((sw - dw) / 2 - origin.x).toInt(), ((sh - dh) / 2 - origin.y).toInt()),
+                dstSize = androidx.compose.ui.unit.IntSize(dw.toInt(), dh.toInt()),
+                filterQuality = FilterQuality.High,
+            )
+        }
+        drawRect(tint)
+        drawContent()
+    }
+}
+
+/** A small square button on the home screen: frosted, or rose when [accent] (＋, Done). */
+@Composable
+fun GlassSquare(glyph: String, accent: Boolean, glyphSize: Dp = 17.dp, onClick: () -> Unit) {
+    val pal = LocalPal.current
+    val st = HomeState.get(androidx.compose.ui.platform.LocalContext.current)
+    val shape = RoundedCornerShape(10.dp)
+    Box(
+        Modifier.size(30.dp).then(if (accent) Modifier.clip(shape).background(pal.acc) else Modifier.frosted(st, shape, wash = 0.42f, edge = 0.16f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Glyph(glyph, size = glyphSize, color = if (accent) pal.ink else pal.fg) }
+}
 
 /** Unread notifications: a small rose bar just under an icon, the same everywhere (dock, home, folders, drawer). */
 @Composable

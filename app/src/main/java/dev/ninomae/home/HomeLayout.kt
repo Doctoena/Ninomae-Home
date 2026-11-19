@@ -52,8 +52,8 @@ object GridSize {
 fun gridCols(screen: Int) = if (screen == 0) GridSize.innerCols else GridSize.coverCols
 fun gridRows(screen: Int) = if (screen == 0) GridSize.innerRows else GridSize.coverRows
 
-fun loadHome(prefs: SharedPreferences): List<HomeItem> = runCatching {
-    val a = JSONArray(prefs.getString("homeItems", "[]")!!)
+fun loadHome(prefs: SharedPreferences, key: String = "homeItems"): List<HomeItem> = runCatching {
+    val a = JSONArray(prefs.getString(key, "[]")!!)
     (0 until a.length()).map {
         val o = a.getJSONObject(it)
         val apps = o.optJSONArray("apps")
@@ -256,6 +256,7 @@ fun HomeState.addShortcut(id: String, pkg: String, serial: Long, label: String, 
 fun ninomaeSize(kind: String, screen: Int): Pair<Int, Int> = when (kind) {
     "stack" -> if (screen == 0) 4 to 3 else 4 to 3
     "clock" -> 4 to 1
+    "calendar" -> 4 to 4
     else -> 4 to 1
 }
 
@@ -264,5 +265,6 @@ val ninomaeWidgets = listOf(
     Triple("greeting", "Greeting", "Your name, the date, battery and uptime"),
     Triple("player", "Player", "What's playing, tinted by the cover"),
     Triple("jump", "Jump back in", "Your pairs and recent apps"),
+    Triple("calendar", "Calendar", "This month and what's coming up"),
     Triple("clock", "Clock", "A big clock and the date, right on the wallpaper"),
 )

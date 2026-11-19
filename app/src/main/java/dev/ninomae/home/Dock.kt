@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -30,7 +29,7 @@ import androidx.compose.ui.unit.sp
 
 /**
  * The dock (C3): one squircle of frosted glass. Pinned apps, then (inner screen) recent apps after a
- * hairline, then a rose all-apps circle (no sheen line on top: the user didn't like it). An app with notifications gets a small rose bar under it.
+ * hairline, then a rose all-apps squircle (no sheen line on top: the user didn't like it). An app with notifications gets a small rose bar under it.
  * Holding an app joins its menu onto the dock; it also takes drops.
  */
 @Composable
@@ -70,7 +69,7 @@ fun Dock(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
         }
         Hairline()
         Box(
-            Modifier.size(48.dp).clip(CircleShape).background(pal.acc).pressScale().clickable { ui.toggle(Layer.Apps) },
+            Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(pal.acc).pressScale().clickable { ui.toggle(Layer.Apps) },
             contentAlignment = Alignment.Center,
         ) { Glyph("apps", size = 24.dp, color = pal.ink) }
     }

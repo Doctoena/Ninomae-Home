@@ -116,9 +116,12 @@ class MainActivity : ComponentActivity() {
         st.refreshAccess()
         applyStatusBar()
         Glance.refresh(this, st)
+        Clock.start()
+        Clock.tick()
     }
 
     override fun onStop() {
+        Clock.stop()
         Status.stop(this)
         AppWidgets.stop()
         super.onStop()

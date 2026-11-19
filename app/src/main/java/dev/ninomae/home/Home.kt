@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
@@ -88,6 +89,8 @@ class Ui {
     var editing by mutableStateOf(false)
     /** The home item picked in edit mode: it gets handles, and the bottom bar becomes its card. */
     var selected by mutableStateOf<String?>(null)
+    /** The widget picker was opened from the widgets page: what's picked goes there. */
+    var pickForFeed by mutableStateOf(false)
 
     /** How far the control deck is pulled down and the app sheet raised (0..1); they follow the finger. */
     var deck by mutableFloatStateOf(0f)
@@ -485,7 +488,7 @@ private fun PickedCard(st: HomeState, ui: Ui, item: HomeItem) {
         "folder" -> "folder"
         "shortcut" -> "shortcut"
         "stack" -> "layers"
-        "nwidget" -> when (item.kind) { "clock" -> "schedule"; "player" -> "music_note"; "greeting" -> "waving_hand"; "jump" -> "history"; else -> "widgets" }
+        "nwidget" -> when (item.kind) { "clock" -> "schedule"; "calendar" -> "calendar_month"; "player" -> "music_note"; "greeting" -> "waving_hand"; "jump" -> "history"; else -> "widgets" }
         else -> "widgets"
     }
     val about = if (item.resizable) "${item.w} × ${item.h} · drag the edges to resize" else "Hold to move it"
@@ -610,17 +613,28 @@ fun Anchored(anchor: Rect, above: Boolean, gapDp: Float, content: @Composable ()
 
 // ---------- time and text helpers ----------
 
-@Composable
-fun rememberNow(): LocalDateTime {
-    var now by remember { mutableStateOf(LocalDateTime.now()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            now = LocalDateTime.now()
-            delay(60_000 - System.currentTimeMillis() % 60_000 + 50)
+/** One minute clock for everything on screen. It ticks on the minute, and again on resume (timers stop in deep sleep). */
+object Clock {
+    var now by mutableStateOf(LocalDateTime.now())
+        private set
+    private var job: kotlinx.coroutines.Job? = null
+
+    fun tick() { now = LocalDateTime.now() }
+
+    fun start() {
+        if (job?.isActive == true) return
+        job = kotlinx.coroutines.MainScope().launch {
+            while (true) {
+                tick()
+                delay(60_000 - System.currentTimeMillis() % 60_000 + 50)
+            }
         }
     }
-    return now
+
+    fun stop() { job?.cancel(); job = null }
 }
+
+fun rememberNow(): LocalDateTime = Clock.now
 
 @Composable
 fun clockText(now: LocalDateTime): String {

@@ -54,10 +54,10 @@ fun AppMenu(st: HomeState, ui: Ui, compact: Boolean) {
     // Where it lives, if there's something to do about it: out of a folder, off the home screen, or onto it.
     val place: MenuAction? = when {
         ui.menuFolderId != null -> MenuAction("remove_circle", "Take out") {
-            st.removeFromFolder(ui.menuFolderId!!, app.key); st.addAppToHome(app.key, ui.screen, ui.page); ui.close()
+            st.removeFromFolder(ui.menuFolderId!!, app.key); st.addAppToHome(app.key, ui.screen, maxOf(ui.page, 0)); ui.close()
         }
         ui.menuHomeId != null -> MenuAction("hide_source", "Remove from home") { st.removeItem(ui.menuHomeId!!); ui.back() }
-        !onHome -> MenuAction("add_to_home_screen", "Add to home") { st.addAppToHome(app.key, ui.screen, ui.page); ui.back() }
+        !onHome -> MenuAction("add_to_home_screen", "Add to home") { st.addAppToHome(app.key, ui.screen, maxOf(ui.page, 0)); ui.back() }
         else -> null
     }
     val left = listOfNotNull(

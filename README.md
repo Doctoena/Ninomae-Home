@@ -73,9 +73,11 @@ On a tablet-sized screen, like a foldable's inner screen, the layout becomes a d
 
 ## Build
 
+Needs a JDK 17 or newer. The release build is the one to use day to day, since it's shrunk and much faster than a debug build:
+
 ```
-JAVA_HOME=/usr/lib/jvm/java-25-openjdk ./gradlew assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleRelease
+adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 
 ## Access it asks for

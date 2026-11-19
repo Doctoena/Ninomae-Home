@@ -33,6 +33,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -68,8 +69,10 @@ fun HomeGrid(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
     val cols = gridCols(screen)
     val rows = gridRows(screen)
     val dragging = ui.drag != null
-    val pages = st.pageCount(screen) + if (dragging || ui.editing) 1 else 0
-    val pager = rememberPagerState(pageCount = { pages })
+    // The widgets page sits left of the first home page (not while editing), so home pages shift by [off].
+    val off = if (st.feedOn && !ui.editing) 1 else 0
+    val pages = off + st.pageCount(screen) + if (dragging || ui.editing) 1 else 0
+    val pager = rememberPagerState(initialPage = off, pageCount = { pages })
     val density = LocalDensity.current
     val notes by NotifService.notes.collectAsState()
     val badged = remember(notes) { notes.map { it.pkg }.toSet() }
@@ -78,21 +81,23 @@ fun HomeGrid(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
         ui.screen = screen
         st.lastScreen = screen
     }
-    LaunchedEffect(pager.currentPage) { ui.page = pager.currentPage; ui.selected = null }
+    LaunchedEffect(pager.currentPage, off) { ui.page = pager.currentPage - off; ui.selected = null }
+    // Turning the widgets page on or off, or entering edit mode, keeps you on the same home page.
+    var lastOff by remember { mutableIntStateOf(off) }
+    LaunchedEffect(off) {
+        if (off != lastOff) { pager.scrollToPage((pager.currentPage + off - lastOff).coerceAtLeast(0)); lastOff = off }
+    }
     LaunchedEffect(ui.editing) { if (!ui.editing) ui.selected = null }
-    // The wallpaper drifts a little as you turn pages.
+    // The wallpaper stays centred on every page (the user doesn't want it spanning across pages).
     val view = androidx.compose.ui.platform.LocalView.current
     val ctx = LocalContext.current
-    LaunchedEffect(pages) {
+    LaunchedEffect(view.windowToken) {
         val wm = android.app.WallpaperManager.getInstance(ctx)
-        runCatching { wm.setWallpaperOffsetSteps(if (pages > 1) 1f / (pages - 1) else 1f, 1f) }
-        androidx.compose.runtime.snapshotFlow { pager.currentPage + pager.currentPageOffsetFraction }.collect { f ->
-            val x = if (pages > 1) (f / (pages - 1)).coerceIn(0f, 1f) else 0.5f
-            view.windowToken?.let { runCatching { wm.setWallpaperOffsets(it, x, 0.5f) } }
-        }
+        runCatching { wm.setWallpaperOffsetSteps(0f, 0f) }
+        view.windowToken?.let { runCatching { wm.setWallpaperOffsets(it, 0.5f, 0.5f) } }
     }
     LaunchedEffect(ui.jumpToPage) {
-        ui.jumpToPage?.let { pager.animateScrollToPage(it.coerceIn(0, pages - 1)) }
+        ui.jumpToPage?.let { pager.animateScrollToPage((it + off).coerceIn(0, pages - 1)) }
         ui.jumpToPage = null
     }
     // Hold a drag at the left or right edge to turn the page.
@@ -129,7 +134,9 @@ fun HomeGrid(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
                 ui.cellWdp = cw.value
                 ui.cellHdp = ch.value
             }
-            HorizontalPager(pager, Modifier.fillMaxSize(), userScrollEnabled = !dragging, beyondViewportPageCount = 1) { page ->
+            HorizontalPager(pager, Modifier.fillMaxSize(), userScrollEnabled = !dragging, beyondViewportPageCount = 1) { pagerPage ->
+                if (pagerPage < off) { FeedPage(st, ui, compact); return@HorizontalPager }
+                val page = pagerPage - off
                 Box(Modifier.fillMaxSize().desktopGestures(st, ui)) {
                     if (ui.editing) EditDots(cols, rows, cw, ch)
                     st.home.filter { it.screen == screen && it.page == page }.forEach { item ->
@@ -471,6 +478,7 @@ fun NinomaeWidget(st: HomeState, ui: Ui, kind: String) {
             } else JumpBack(st, items, all)
         }
         "clock" -> ClockSlab(st)
+        "calendar" -> CalendarWidget(st, ui, Modifier.fillMaxSize(), fit = true)
     }
 }
 

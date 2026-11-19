@@ -71,7 +71,7 @@ object AppWidgets {
     private var mgr: AppWidgetManager? = null
     private var activity: WeakReference<Activity>? = null
 
-    private data class Pending(val id: Int, val info: AppWidgetProviderInfo, val screen: Int, val page: Int, val w: Int, val h: Int)
+    private data class Pending(val id: Int, val info: AppWidgetProviderInfo, val screen: Int, val page: Int, val w: Int, val h: Int, val feed: Boolean)
     private var pending: Pending? = null
 
     fun init(a: Activity) {
@@ -105,12 +105,12 @@ object AppWidgets {
         return w to h
     }
 
-    fun add(info: AppWidgetProviderInfo, screen: Int, page: Int, w: Int, h: Int) {
+    fun add(info: AppWidgetProviderInfo, screen: Int, page: Int, w: Int, h: Int, feed: Boolean = false) {
         val a = activity?.get() ?: return
         val hst = host ?: return
         val m = mgr ?: return
         val id = hst.allocateAppWidgetId()
-        pending = Pending(id, info, screen, page, w, h)
+        pending = Pending(id, info, screen, page, w, h, feed)
         if (m.bindAppWidgetIdIfAllowed(id, info.profile, info.provider, null)) {
             afterBind()
         } else {
@@ -138,7 +138,8 @@ object AppWidgets {
     private fun place() {
         val p = pending ?: return
         val a = activity?.get() ?: return
-        HomeState.get(a).addAndroidWidget(p.id, p.screen, p.page, p.w, p.h)
+        if (p.feed) HomeState.get(a).addFeedAndroidWidget(p.id, if (p.w * 2 <= gridCols(p.screen)) 1 else 2, p.h)
+        else HomeState.get(a).addAndroidWidget(p.id, p.screen, p.page, p.w, p.h)
         pending = null
     }
 
@@ -206,7 +207,7 @@ fun WidgetPicker(st: HomeState, ui: Ui, progress: () -> Float, modifier: Modifie
         }.sortedBy { it.label.lowercase() }
     }
     var open by remember { mutableStateOf("ninomae") }
-    LaunchedEffect(ui.layer) { if (ui.layer != Layer.Widgets) open = "ninomae" }
+    LaunchedEffect(ui.layer) { if (ui.layer != Layer.Widgets) { open = "ninomae"; ui.pickForFeed = false } }
     val total = rows.size + 1
 
     Box(modifier) {
@@ -241,7 +242,7 @@ fun WidgetPicker(st: HomeState, ui: Ui, progress: () -> Float, modifier: Modifie
                 Expanded {
                     ninomaeWidgets.forEach { (kind, name, _) ->
                         Entry(name, ninomaeSizes(kind, screen), preview = { NinomaePreview(kind) }) { size ->
-                            st.addNinomaeWidget(kind, screen, ui.page, size)
+                            if (ui.pickForFeed) st.addFeedNinomae(kind) else st.addNinomaeWidget(kind, screen, maxOf(ui.page, 0), size)
                             ui.close()
                         }
                     }
@@ -260,7 +261,7 @@ fun WidgetPicker(st: HomeState, ui: Ui, progress: () -> Float, modifier: Modifie
                             val span = AppWidgets.spans(info, ctx, ui.cellWdp, ui.cellHdp, screen)
                             Entry(info.loadLabel(ctx.packageManager), listOf(span), preview = { Preview(info) }) { (w, h) ->
                                 ui.close()
-                                AppWidgets.add(info, screen, ui.page, w, h)
+                                AppWidgets.add(info, screen, maxOf(ui.page, 0), w, h, feed = ui.pickForFeed)
                             }
                         }
                     }
@@ -342,6 +343,10 @@ private fun NinomaePreview(kind: String) {
                 Title(clockText(java.time.LocalDateTime.now()), size = 26.sp)
                 Spacer(Modifier.width(10.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) { repeat(3) { Box(Modifier.size(40.dp, 10.dp).clip(RoundedCornerShape(4.dp)).background(glass(0.12f))) } }
+            }
+            "calendar" -> Column(Modifier.align(Alignment.CenterStart), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Lbl(java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("MMMM")), size = 13.sp, weight = FontWeight.Black, family = TitleFont)
+                repeat(3) { r -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { repeat(7) { c -> Box(Modifier.size(9.dp).clip(RoundedCornerShape(3.dp)).background(if (r == 1 && c == 3) pal.acc else glass(0.14f))) } } }
             }
             "greeting" -> Column(Modifier.align(Alignment.CenterStart)) {
                 Lbl("Good " + when (java.time.LocalTime.now().hour) { in 5..11 -> "morning"; in 12..17 -> "afternoon"; else -> "evening" }, size = 13.sp, weight = FontWeight.SemiBold)

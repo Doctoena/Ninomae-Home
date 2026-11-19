@@ -30,6 +30,10 @@ object Glance {
 
     var event by mutableStateOf<Event?>(null)
         private set
+    /** The rest of today's events, for the widgets page. */
+    data class Today(val time: String, val title: String, val begin: Long, val end: String? = null)
+    var today by mutableStateOf<List<Today>>(emptyList())
+        private set
     var weather by mutableStateOf<Weather?>(null)
         private set
 
@@ -39,10 +43,17 @@ object Glance {
     fun has(ctx: Context, p: String) = ctx.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
 
     /** Called when home comes back and every so often while it's showing. */
+    /** Bumped on every refresh (the launcher coming back, say), so widgets that read the calendar reload. */
+    var stamp by mutableStateOf(0)
+        private set
+
     fun refresh(ctx: Context, st: HomeState) {
+        stamp++
         val app = ctx.applicationContext
         scope.launch {
-            event = if (st.glanceCalendar && has(app, Manifest.permission.READ_CALENDAR)) withContext(Dispatchers.IO) { nextEvent(app) } else null
+            val cal = st.glanceCalendar && has(app, Manifest.permission.READ_CALENDAR)
+            event = if (cal) withContext(Dispatchers.IO) { nextEvent(app) } else null
+            today = if (cal) withContext(Dispatchers.IO) { todayEvents(app) } else emptyList()
             if (!st.glanceWeather) {
                 weather = null
             } else if (System.currentTimeMillis() - weatherAt > 30 * 60_000 && has(app, Manifest.permission.ACCESS_COARSE_LOCATION)) {
@@ -92,6 +103,29 @@ object Glance {
             }
         }
     }.getOrNull()
+
+    /** What's left of today, timed events first by start, all-day ones as "All day". */
+    private fun todayEvents(ctx: Context): List<Today> = runCatching {
+        val now = System.currentTimeMillis()
+        val end = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59) }.timeInMillis
+        val cur = CalendarContract.Instances.query(
+            ctx.contentResolver,
+            arrayOf(CalendarContract.Instances.TITLE, CalendarContract.Instances.BEGIN, CalendarContract.Instances.END, CalendarContract.Instances.ALL_DAY),
+            now, end,
+        ) ?: return@runCatching emptyList()
+        val out = mutableListOf<Today>()
+        cur.use { c ->
+            while (c.moveToNext()) {
+                val title = c.getString(0)?.takeIf { it.isNotBlank() } ?: continue
+                val begin = c.getLong(1)
+                if (c.getLong(2) < now) continue
+                val allDay = c.getInt(3) == 1
+                val fmt = DateFormat.getTimeFormat(ctx)
+                out += Today(if (allDay) "All day" else fmt.format(Date(begin)), title, if (allDay) 0 else begin, if (allDay) null else fmt.format(Date(c.getLong(2))))
+            }
+        }
+        out.sortedBy { it.begin }.take(6)
+    }.getOrDefault(emptyList())
 
     private fun isTomorrow(t: Long): Boolean {
         val a = Calendar.getInstance()

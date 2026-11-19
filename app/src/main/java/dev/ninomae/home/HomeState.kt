@@ -28,6 +28,8 @@ import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -99,6 +101,11 @@ class HomeState private constructor(private val ctx: Context) {
     var dots by mutableStateOf(prefs.getBoolean("dots", true))
         private set
     /** The wallpaper, blurred, for the glass drawer (only when it was set from Ninomae). */
+    /** The widgets page left of the first home page: on or off, and the widgets on it, top to bottom. */
+    var feedOn by mutableStateOf(prefs.getBoolean("feedOn", true))
+        private set
+    var feed by mutableStateOf(loadFeed(prefs))
+    fun updateFeedOn(v: Boolean) { feedOn = v; prefs.edit().putBoolean("feedOn", v).apply() }
     var glass by mutableStateOf(Glass.load(ctx))
         private set
     var wallPreview by mutableStateOf(Glass.loadPreview(ctx))
@@ -164,7 +171,7 @@ class HomeState private constructor(private val ctx: Context) {
 
     /** Rendered icons, kept until the app updates or the icon style changes. */
     private data class Rendered(val stamp: String, val icon: ImageBitmap, val tint: Color, val mono: ImageBitmap?, val installed: Long)
-    private val rendered = HashMap<String, Rendered>()
+    private val rendered = java.util.concurrent.ConcurrentHashMap<String, Rendered>()
 
     init {
         GridSize.innerCols = prefs.getInt("innerCols", 8)
@@ -209,13 +216,14 @@ class HomeState private constructor(private val ctx: Context) {
         loadJob?.cancel()
         loadJob = scope.launch {
             if (!first) kotlinx.coroutines.delay(300)
-            val list = withContext(Dispatchers.IO) {
+            val list = withContext(Dispatchers.Default) {
                 val px = (64 * ctx.resources.displayMetrics.density).toInt()
+                // Icons are drawn (and themed masks worked out) on all cores at once; it's the slow part of a cold start.
                 launcherApps.profiles.flatMap { user ->
                     launcherApps.getActivityList(null, user)
                         .filter { it.componentName.packageName != ctx.packageName }
-                        .map { entry(it, user, px) }
-                }.sortedBy { it.label.lowercase() }
+                        .map { info -> async { entry(info, user, px) } }
+                }.awaitAll().sortedBy { it.label.lowercase() }
             }
             apps = list
             firstRunDefaults()

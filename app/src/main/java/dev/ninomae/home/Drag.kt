@@ -102,6 +102,8 @@ private fun performDrop(st: HomeState, ui: Ui) {
     val p = ui.dragPos
     val screen = ui.screen
     val page = ui.page
+    // Dropped while the widgets page is showing: nothing to drop onto there.
+    if (page < 0 && !overRemoveZone(ui) && !ui.dockRect.contains(ui.dragPos)) return
     val key = src.appKey ?: src.item?.takeIf { it.type == "app" }?.app
 
     // Above the grid: take it off the home screen, or out of its folder.

@@ -43,6 +43,7 @@ object Icons {
     private var packMap: Map<String, String> = emptyMap()
 
     /** component "pkg/cls" -> drawable name, from the pack's appfilter.xml. */
+    @Synchronized
     private fun loadPack(ctx: Context, pkg: String?) {
         if (pkg == loadedPack) return
         loadedPack = pkg
@@ -73,9 +74,9 @@ object Icons {
 
     /** The pack's drawable for this app, if it has one. */
     fun fromPack(ctx: Context, pack: String?, cn: ComponentName): Drawable? {
-        loadPack(ctx, pack)
-        val res = packRes ?: return null
-        val name = packMap["${cn.packageName}/${cn.className}"] ?: return null
+        val (res, map) = synchronized(this) { loadPack(ctx, pack); packRes to packMap }
+        if (res == null) return null
+        val name = map["${cn.packageName}/${cn.className}"] ?: return null
         val id = res.getIdentifier(name, "drawable", pack)
         if (id == 0) return null
         return runCatching { res.getDrawableForDensity(id, ctx.resources.displayMetrics.densityDpi, null) }.getOrNull()
