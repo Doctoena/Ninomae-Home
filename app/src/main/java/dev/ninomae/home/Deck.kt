@@ -257,24 +257,6 @@ private fun ThickBar(value: Float, glyph: String, label: String, enabled: Boolea
     }
 }
 
-private fun Modifier.slideToSet(onChange: (Float) -> Unit): Modifier = composed {
-    val change by rememberUpdatedState(onChange)
-    slideToSetRaw { change(it) }
-}
-
-private fun Modifier.slideToSetRaw(onChange: (Float) -> Unit): Modifier = pointerInput(Unit) {
-    awaitPointerEventScope {
-        while (true) {
-            val e = awaitPointerEvent()
-            val c = e.changes.firstOrNull() ?: continue
-            if (c.pressed) {
-                onChange((c.position.x / size.width).coerceIn(0f, 1f))
-                c.consume()
-            }
-        }
-    }
-}
-
 /** The rail: time and battery, the toggles in groups, then launcher settings, Android settings and power. */
 @Composable
 private fun Rail(st: HomeState, ui: Ui, modifier: Modifier) {

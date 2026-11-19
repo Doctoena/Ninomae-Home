@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.areStatusBarsVisible
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -274,18 +275,28 @@ fun Home(st: HomeState, ui: Ui) {
             .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
             .windowInsetsPadding(WindowInsets.navigationBars)
 
+        // Samsung's status bar still slides in for a moment on a swipe from the top; ours steps aside meanwhile.
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        val systemBar = WindowInsets.areStatusBarsVisible
+        val ours by animateFloatAsState(if (systemBar) 0f else 1f, label = "ourBar")
+
         // ---------- desktop (eases back a touch while something is over it) ----------
         Column(
             insets
                 .graphicsLayer { val k = 1f - 0.05f * behind - 0.06f * maxOf(ui.sheet, ui.settings); scaleX = k; scaleY = k; alpha = (1f - 0.35f * ui.deck - (if (st.glass == null) 0.8f else 1f) * maxOf(ui.sheet, ui.settings)).coerceAtLeast(0f) }
                 .then(if (behind > 0.01f) Modifier.blur((18 * behind).dp, BlurredEdgeTreatment.Unbounded) else Modifier),
         ) {
-            if (ownBar) Bar(st, ui, compact, Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp))
+            if (ownBar) Bar(st, ui, compact, Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 8.dp).graphicsLayer { alpha = ours })
             else Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars).padding(bottom = 4.dp))
             HomeGrid(st, ui, compact, Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp))
             Box(Modifier.fillMaxWidth().padding(bottom = 12.dp, top = 8.dp), contentAlignment = Alignment.Center) {
                 if (ui.editing) EditBar(st, ui) else Dock(st, ui, compact, Modifier)
             }
+        }
+
+        // ---------- the cover screen's island, over the bar (so it can grow over the home screen) ----------
+        if (ownBar && compact && ui.layer == Layer.None && ui.deck < 0.01f && ours > 0.01f) {
+            Box(insets.graphicsLayer { alpha = ours }) { Island(st, ui, Modifier.padding(top = 5.dp)) }
         }
 
         // ---------- dim + tap outside to close ----------

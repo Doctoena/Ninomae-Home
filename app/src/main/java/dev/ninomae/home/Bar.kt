@@ -41,10 +41,10 @@ import androidx.compose.ui.graphics.Shape
 import java.time.format.DateTimeFormatter
 import androidx.compose.ui.unit.Dp
 /**
- * B2a · The bar that replaces Android's status bar on the home screen: frosted glass, split where
- * the camera is so the hole sits in the gap. Inner screen: pairs | player | status, then the clock
- * after the camera. Cover (camera in the middle): clock and pairs | camera | status.
- * Without a camera along the top it's one piece, the clock at its end.
+ * The bar that replaces Android's status bar on the home screen. Inner screen (B2a): frosted glass,
+ * split where the camera is so the hole sits in the gap: pairs | player | Wi-Fi and the bell, then
+ * the battery and clock after the camera; one piece if there's no camera along the top.
+ * Cover screen: just the corners (Wi-Fi, the bell), around the island (Island.kt).
  */
 @Composable
 fun Bar(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
@@ -68,21 +68,35 @@ fun Bar(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
     val big = 16.dp
     val small = 8.dp
 
+    if (compact) {
+        // Cover screen: the island (drawn over the home screen, see Island.kt) holds the middle and the battery;
+        // Wi-Fi and the bell sit in the corners.
+        val pal = LocalPal.current
+        val notes by NotifService.notes.collectAsState()
+        Box(modifier.height(40.dp)) {
+            CornerDot(Modifier.align(Alignment.CenterStart), onClick = { ui.toggle(Layer.Deck) }) {
+                Glyph(if (Status.wifi) "wifi" else "wifi_off", size = 17.dp, color = if (Status.wifi) pal.fg else pal.sub)
+            }
+            CornerDot(Modifier.align(Alignment.CenterEnd), onClick = { ui.toggle(Layer.Deck) }) {
+                Glyph("notifications", size = 17.dp, fill = true)
+                if (notes.isNotEmpty()) Box(Modifier.align(Alignment.TopEnd).padding(top = 7.dp, end = 8.dp).size(7.dp).clip(CircleShape).background(pal.acc))
+            }
+        }
+        return
+    }
     Row(modifier.height(40.dp).onGloballyPositioned { bar = it.boundsInRoot() }) {
         if (split == null) {
             Piece(st, Modifier.weight(1f), RoundedCornerShape(big)) {
-                if (compact) { ClockText(false); Line(); Pairs(st, ui, true); Spacer(Modifier.weight(1f)); Status(ui) }
-                else { Pairs(st, ui, false); Line(); Player(ui, Modifier.weight(1f)); Line(); Status(ui); Line(); ClockText(true) }
+                Pairs(st, ui, false); Line(); Player(ui, Modifier.weight(1f)); Line(); Status(ui); Line(); ClockText(true)
             }
         } else {
             Piece(st, Modifier.width(split.first), corners(big, small, small, big)) {
-                if (compact) { ClockText(false); Line(); Pairs(st, ui, true) }
-                else { Pairs(st, ui, false); Line(); Player(ui, Modifier.weight(1f)); Line(); Status(ui, battery = false) }
+                Pairs(st, ui, false); Line(); Player(ui, Modifier.weight(1f)); Line(); Status(ui, battery = false)
             }
             Spacer(Modifier.width(split.second - split.first))
             Piece(st, Modifier.weight(1f), corners(small, big, big, small)) {
                 // The battery rides with the clock after the camera, so both pieces are about as full.
-                if (compact) { Spacer(Modifier.weight(1f)); Status(ui) } else { Spacer(Modifier.weight(1f)); BatteryChip(ui); ClockText(false); Spacer(Modifier.weight(1f)) }
+                Spacer(Modifier.weight(1f)); BatteryChip(ui); ClockText(false); Spacer(Modifier.weight(1f))
             }
         }
     }
@@ -101,6 +115,12 @@ private fun knownCamera(widthPx: Float, density: Float, compact: Boolean): Rect?
     val cx = widthPx / 2 + dx * density
     val r = size * density / 2
     return Rect(cx - r, top * density, cx + r, top * density + 2 * r)
+}
+
+/** A small black circle in a corner of the cover bar, the island's colour, holding one icon. */
+@Composable
+private fun CornerDot(modifier: Modifier, onClick: () -> Unit, content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit) {
+    Box(modifier.size(36.dp).clip(CircleShape).background(IslandBlack).clickable(onClick = onClick), contentAlignment = Alignment.Center, content = content)
 }
 
 @Composable

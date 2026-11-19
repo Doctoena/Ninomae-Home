@@ -1,5 +1,9 @@
 package dev.ninomae.home
 
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.composed
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -232,3 +236,22 @@ fun rememberPosition(m: MediaNow): androidx.compose.runtime.State<Long> =
             kotlinx.coroutines.delay(1000)
         }
     }
+
+/** Press or drag across it to set a value from 0 (left) to 1 (right). */
+fun Modifier.slideToSet(onChange: (Float) -> Unit): Modifier = composed {
+    val change by rememberUpdatedState(onChange)
+    slideToSetRaw { change(it) }
+}
+
+private fun Modifier.slideToSetRaw(onChange: (Float) -> Unit): Modifier = pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) {
+            val e = awaitPointerEvent()
+            val c = e.changes.firstOrNull() ?: continue
+            if (c.pressed) {
+                onChange((c.position.x / size.width).coerceIn(0f, 1f))
+                c.consume()
+            }
+        }
+    }
+}
