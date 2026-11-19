@@ -222,3 +222,13 @@ fun MiniSwitch(on: Boolean, onClick: () -> Unit) {
     }
 }
 
+/** Where [m] is in its song, updated once a second while it plays. */
+@Composable
+fun rememberPosition(m: MediaNow): androidx.compose.runtime.State<Long> =
+    androidx.compose.runtime.produceState(m.positionNow(), m) {
+        while (true) {
+            value = m.positionNow()
+            if (!m.playing) break
+            kotlinx.coroutines.delay(1000)
+        }
+    }

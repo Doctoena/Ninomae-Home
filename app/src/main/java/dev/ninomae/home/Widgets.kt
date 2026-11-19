@@ -16,22 +16,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 import java.time.format.DateTimeFormatter
 
 /** Desktop stack: greeting, player, jump back in, joined like the shell's sidebar. */
@@ -86,14 +83,8 @@ fun Greeting(st: HomeState, shape: Shape, modifier: Modifier = Modifier) {
 @Composable
 fun PlayerCard(m: MediaNow, shape: Shape) {
     val pal = LocalPal.current
-    var pos by remember { mutableLongStateOf(m.positionNow()) }
-    LaunchedEffect(m) {
-        while (true) {
-            pos = m.positionNow()
-            if (!m.playing) break
-            delay(1000)
-        }
-    }
+    // Read only by the time text and the bar's drawing, so the card itself doesn't redraw every second.
+    val pos = rememberPosition(m)
     val tint = m.tint?.let { mix(pal.l3, it, 0.24f) } ?: pal.l3
     Piece(Modifier.fillMaxWidth().height(98.dp), shape, tint) {
         Row(Modifier.fillMaxHeight().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -111,7 +102,7 @@ fun PlayerCard(m: MediaNow, shape: Shape) {
                     ) { Glyph(if (m.playing) "pause" else "play_arrow", size = 20.dp, color = pal.ink, fill = true) }
                     IconButton("skip_next", 30.dp, pal.fg) { Media.next() }
                     Spacer(Modifier.weight(1f))
-                    if (m.duration > 0) Num("${mmss(pos)} / ${mmss(m.duration)}", size = 11.sp, color = pal.sub)
+                    if (m.duration > 0) PositionText(pos, m.duration)
                 }
             }
         }
@@ -120,14 +111,20 @@ fun PlayerCard(m: MediaNow, shape: Shape) {
                 Modifier
                     .align(Alignment.BottomStart)
                     .padding(horizontal = 17.dp)
-                    .fillMaxWidth((pos.toFloat() / m.duration).coerceIn(0f, 1f))
+                    .fillMaxWidth()
                     .height(3.dp)
-                    .clip(CircleShape)
-                    .background(pal.acc),
+                    .drawBehind {
+                        val w = size.width * (pos.value.toFloat() / m.duration).coerceIn(0f, 1f)
+                        drawRoundRect(pal.acc, size = androidx.compose.ui.geometry.Size(w, size.height), cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height / 2))
+                    },
             )
         }
     }
 }
+
+@Composable
+private fun PositionText(pos: androidx.compose.runtime.State<Long>, duration: Long) =
+    Num("${mmss(pos.value)} / ${mmss(duration)}", size = 11.sp, color = LocalPal.current.sub)
 
 sealed interface Jump {
     data class P(val pair: AppPair) : Jump

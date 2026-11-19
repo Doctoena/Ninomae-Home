@@ -29,8 +29,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.unit.IntOffset
-import kotlin.math.roundToInt
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -38,181 +36,204 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import java.time.format.DateTimeFormatter
+import androidx.compose.ui.unit.Dp
 /**
- * Replaces Android's status bar on the home screen: pairs left, player middle, status and clock right.
- * It sits right at the top edge; only a piece that would run into the camera hole steps sideways around it.
+ * B2a · The bar that replaces Android's status bar on the home screen: frosted glass, split where
+ * the camera is so the hole sits in the gap. Inner screen: pairs | player | status, then the clock
+ * after the camera. Cover (camera in the middle): clock and pairs | camera | status.
+ * Without a camera along the top it's one piece, the clock at its end.
  */
 @Composable
 fun Bar(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
     val view = LocalView.current
-    val gap = with(LocalDensity.current) { 8.dp.toPx() }
+    val density = LocalDensity.current
     var bar by remember { mutableStateOf(Rect.Zero) }
-    var left by remember { mutableStateOf(Rect.Zero) }
-    var mid by remember { mutableStateOf(Rect.Zero) }
-    var right by remember { mutableStateOf(Rect.Zero) }
-    // Camera holes along the top edge, in the same (window) coordinates as boundsInRoot.
-    val holes = remember(bar) {
-        view.rootWindowInsets?.displayCutout?.boundingRects.orEmpty()
-            .filter { it.top <= 0 && it.width() > 0 && it.height() > 0 }
+    // The camera hole, in the same (window) coordinates as boundsInRoot.
+    val hole = remember(bar) {
+        val reported = (view.rootWindowInsets?.displayCutout ?: view.display?.cutout)?.boundingRects.orEmpty()
+            .filter { it.width() > 0 && it.height() > 0 }
             .map { Rect(it.left.toFloat(), it.top.toFloat(), it.right.toFloat(), it.bottom.toFloat()) }
+        reported.ifEmpty { listOfNotNull(knownCamera(view.rootView.width.toFloat(), density.density, compact)) }
+            // Any hole the bar runs over (the inner screen's camera floats a few dp below the edge).
+            .firstOrNull { bar != Rect.Zero && it.left > bar.left && it.right < bar.right && it.top < bar.bottom && it.bottom > bar.top }
     }
-    fun hit(r: Rect) = holes.firstOrNull { r != Rect.Zero && it.left < r.right + gap && it.right > r.left - gap && it.top < r.bottom }
-    // Push each group just clear of a hole it would touch.
-    val leftShift = hit(left)?.let { it.right + gap - left.left } ?: 0f
-    val rightShift = hit(right)?.let { it.left - gap - right.right } ?: 0f
-    val midShift = hit(mid)?.let { h -> if (mid.center.x < h.center.x) h.left - gap - mid.right else h.right + gap - mid.left } ?: 0f
+    val gap = 8.dp
+    // Where the left piece stops and the right one starts, in dp from the bar's left edge.
+    val split: Pair<Dp, Dp>? = hole?.let { h ->
+        with(density) { ((h.left - bar.left).toDp() - gap) to ((h.right - bar.left).toDp() + gap) }
+    }
+    val big = 16.dp
+    val small = 8.dp
 
-    if (compact) {
-        // Cover screen: the camera sits in the middle, so it's clock + pairs | camera | status, like a phone.
-        Box(modifier.height(36.dp)) {
-            Row(Modifier.align(Alignment.CenterStart), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                ClockPiece(corners(Rad.container, Rad.joined, Rad.joined, Rad.container))
-                PairsPiece(st, ui, true, Modifier, corners(Rad.joined, Rad.container, Rad.container, Rad.joined))
+    Row(modifier.height(40.dp).onGloballyPositioned { bar = it.boundsInRoot() }) {
+        if (split == null) {
+            Piece(st, Modifier.weight(1f), RoundedCornerShape(big)) {
+                if (compact) { ClockText(false); Line(); Pairs(st, ui, true); Spacer(Modifier.weight(1f)); Status(ui) }
+                else { Pairs(st, ui, false); Line(); Player(ui, Modifier.weight(1f)); Line(); Status(ui); Line(); ClockText(true) }
             }
-            StatusPieces(st, ui, Modifier.align(Alignment.CenterEnd), withClock = false)
+        } else {
+            Piece(st, Modifier.width(split.first), corners(big, small, small, big)) {
+                if (compact) { ClockText(false); Line(); Pairs(st, ui, true) }
+                else { Pairs(st, ui, false); Line(); Player(ui, Modifier.weight(1f)); Line(); Status(ui, battery = false) }
+            }
+            Spacer(Modifier.width(split.second - split.first))
+            Piece(st, Modifier.weight(1f), corners(small, big, big, small)) {
+                // The battery rides with the clock after the camera, so both pieces are about as full.
+                if (compact) { Spacer(Modifier.weight(1f)); Status(ui) } else { Spacer(Modifier.weight(1f)); BatteryChip(ui); ClockText(false); Spacer(Modifier.weight(1f)) }
+            }
         }
-        return
-    }
-    Box(modifier.height(36.dp).onGloballyPositioned { bar = it.boundsInRoot() }) {
-        PairsPiece(
-            st, ui, compact,
-            Modifier.align(Alignment.CenterStart)
-                .onGloballyPositioned { left = it.boundsInRoot() }
-                .offset { IntOffset(leftShift.roundToInt(), 0) },
-        )
-        if (!compact) PlayerPiece(
-            ui,
-            Modifier.align(Alignment.Center)
-                .onGloballyPositioned { mid = it.boundsInRoot() }
-                .offset { IntOffset(midShift.roundToInt(), 0) },
-        )
-        StatusPieces(
-            st, ui,
-            Modifier.align(Alignment.CenterEnd)
-                .onGloballyPositioned { right = it.boundsInRoot() }
-                .offset { IntOffset(rightShift.roundToInt(), 0) },
-        )
     }
 }
 
+/**
+ * Cameras a phone doesn't report. Samsung hides the inner screen's camera from apps (the cutout is null),
+ * so it's listed here from the phone's own cutout spec: x from the screen's middle, in dp.
+ */
+private fun knownCamera(widthPx: Float, density: Float, compact: Boolean): Rect? {
+    val model = android.os.Build.MODEL ?: return null
+    val (dx, top, size) = when {
+        model.startsWith("SM-F966") && !compact -> Triple(190.857f, 6.857f, 26.667f) // Galaxy Z Fold 7, inner screen
+        else -> return null
+    }
+    val cx = widthPx / 2 + dx * density
+    val r = size * density / 2
+    return Rect(cx - r, top * density, cx + r, top * density + 2 * r)
+}
+
 @Composable
-private fun PairsPiece(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier, shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(Rad.container)) {
+private fun Piece(st: HomeState, modifier: Modifier, shape: Shape, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    Row(
+        modifier.fillMaxHeight().frosted(st, shape, wash = 0.32f, edge = 0.2f).padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
+}
+
+@Composable
+private fun Line() = Box(Modifier.padding(horizontal = 8.dp).size(1.dp, 20.dp).background(Color.White.copy(alpha = 0.18f)))
+
+/** Saved pairs as chips (the one that's open in rose), then ＋ for a new one. */
+@Composable
+private fun Pairs(st: HomeState, ui: Ui, compact: Boolean) {
     val pal = LocalPal.current
     val ctx = LocalContext.current
-    Piece(modifier.height(36.dp), shape) {
-        Row(
-            Modifier.fillMaxHeight().padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val shown = if (compact) st.pairs.take(3) else st.pairs.take(5)
-            shown.forEach { p ->
-                var rect by remember { mutableStateOf(Rect.Zero) }
-                val active = st.activePair == p.id
-                Row(
-                    Modifier
-                        .height(28.dp)
-                        .onGloballyPositioned { rect = it.boundsInRoot() }
-                        .clip(RoundedCornerShape(Rad.segment))
-                        .background(if (active) pal.acc else pal.l3)
-                        .press(onLong = { ui.showPairMenu(p, rect, above = false) }) { Actions.openPair(ctx, st, p) }
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    AppIcon(st.app(p.left), 15.dp)
-                    AppIcon(st.app(p.right), 15.dp)
-                    if (!compact) {
-                        Spacer(Modifier.width(3.dp))
-                        Lbl(
-                            p.name,
-                            Modifier.widthIn(max = 90.dp),
-                            size = 13.sp,
-                            weight = FontWeight.SemiBold,
-                            color = if (active) pal.ink else pal.fg,
-                        )
-                    }
-                }
-            }
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        st.pairs.take(if (compact) 2 else 4).forEach { p ->
+            var rect by remember { mutableStateOf(Rect.Zero) }
+            val active = st.activePair == p.id
             Row(
                 Modifier
                     .height(28.dp)
-                    .clip(RoundedCornerShape(Rad.segment))
-                    .clickable { ui.newPair() }
-                    .padding(horizontal = 6.dp),
+                    .onGloballyPositioned { rect = it.boundsInRoot() }
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (active) pal.acc else Color.White.copy(alpha = 0.10f))
+                    .press(onLong = { ui.showPairMenu(p, rect, above = false) }) { Actions.openPair(ctx, st, p) }
+                    .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                Glyph("add", size = 18.dp, color = pal.sub)
-                if (st.pairs.isEmpty() && !compact) {
-                    Spacer(Modifier.width(4.dp))
-                    Lbl("New pair", size = 13.sp, color = pal.sub)
+                AppIcon(st.app(p.left), 15.dp)
+                AppIcon(st.app(p.right), 15.dp)
+                if (!compact) {
+                    Spacer(Modifier.width(3.dp))
+                    Lbl(p.name, Modifier.widthIn(max = 90.dp), size = 13.sp, weight = FontWeight.SemiBold, color = if (active) pal.ink else pal.fg)
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun PlayerPiece(ui: Ui, modifier: Modifier) {
-    val media by Media.now.collectAsState()
-    val m = media ?: return
-    val pal = LocalPal.current
-    Piece(modifier.height(36.dp).width(236.dp).clickable { ui.toggle(Layer.Deck) }) {
         Row(
-            Modifier.fillMaxHeight().padding(start = 5.dp, end = 4.dp),
+            Modifier.height(28.dp).clip(RoundedCornerShape(10.dp)).clickable { ui.newPair() }.padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Cover(m.art, 26.dp)
-            Spacer(Modifier.width(8.dp))
-            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                Lbl(m.title, Modifier.weight(1f, fill = false), size = 13.sp, weight = FontWeight.SemiBold)
-                if (m.artist.isNotBlank()) Lbl("  ·  ${m.artist}", Modifier.weight(1f, fill = false), size = 13.sp, color = pal.sub)
+            Glyph("add", size = 18.dp, color = pal.sub)
+            if (st.pairs.isEmpty() && !compact) {
+                Spacer(Modifier.width(4.dp))
+                Lbl("New pair", size = 13.sp, color = pal.sub)
             }
-            IconButton(if (m.playing) "pause" else "play_arrow", size = 30.dp, color = pal.fg) { Media.toggle() }
         }
     }
 }
 
+/** What's playing: cover, title · artist, and a rose pause. Tap it for the deck. Empty space when nothing plays. */
 @Composable
-private fun StatusPieces(st: HomeState, ui: Ui, modifier: Modifier, withClock: Boolean = true) {
+private fun Player(ui: Ui, modifier: Modifier) {
+    val media by Media.now.collectAsState()
+    val pal = LocalPal.current
+    val m = media
+    // Centred in the space between the pairs and the status, the pause right after the name.
+    Row(
+        modifier.fillMaxHeight().clickable(enabled = m != null) { ui.toggle(Layer.Deck) },
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (m == null) return@Row
+        Cover(m.art, 26.dp)
+        Spacer(Modifier.width(8.dp))
+        Row(Modifier.weight(1f, fill = false), verticalAlignment = Alignment.CenterVertically) {
+            Lbl(m.title, Modifier.weight(1f, fill = false), size = 13.sp, weight = FontWeight.SemiBold)
+            if (m.artist.isNotBlank()) Lbl("  ·  ${m.artist}", Modifier.weight(1f, fill = false), size = 13.sp, color = pal.sub)
+        }
+        Spacer(Modifier.width(10.dp))
+        Box(
+            Modifier.size(28.dp, 26.dp).clip(RoundedCornerShape(9.dp)).background(pal.acc).clickable { Media.toggle() },
+            contentAlignment = Alignment.Center,
+        ) { Glyph(if (m.playing) "pause" else "play_arrow", size = 17.dp, color = pal.ink, fill = true) }
+    }
+}
+
+/** Wi-Fi, Silent when on, the battery, and the bell (a rose dot when there's something). Tap for the deck. */
+@Composable
+private fun Status(ui: Ui, battery: Boolean = true) {
     val pal = LocalPal.current
     val notes by NotifService.notes.collectAsState()
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Piece(
-            Modifier.height(36.dp).clickable { ui.toggle(Layer.Deck) },
-            corners(Rad.container, Rad.joined, Rad.joined, Rad.container),
-        ) {
-            Row(
-                Modifier.fillMaxHeight().padding(horizontal = 11.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Glyph(if (Status.wifi) "wifi" else "wifi_off", size = 18.dp, color = if (Status.wifi) pal.fg else pal.dim)
-                if (Status.bt) Glyph("bluetooth", size = 18.dp)
-                if (Status.dnd) Glyph("do_not_disturb_on", size = 17.dp, color = pal.acc, fill = true)
-                Battery()
-                Num("${Status.battery}", size = 13.sp)
-            }
+    Row(
+        Modifier.fillMaxHeight().clip(RoundedCornerShape(10.dp)).clickable { ui.toggle(Layer.Deck) }.padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Glyph(if (Status.wifi) "wifi" else "wifi_off", size = 18.dp, color = if (Status.wifi) pal.fg else pal.sub)
+        if (Status.dnd) Glyph("do_not_disturb_on", size = 17.dp, color = pal.acc, fill = true)
+        if (battery) {
+            Battery()
+            Num("${Status.battery}", size = 13.sp)
         }
-        Piece(
-            Modifier.size(36.dp).clickable { ui.toggle(Layer.Deck) },
-            if (withClock) RoundedCornerShape(Rad.joined) else corners(Rad.joined, Rad.container, Rad.container, Rad.joined),
-        ) {
-            Glyph("notifications", Modifier.align(Alignment.Center), size = 19.dp, fill = notes.isNotEmpty())
-            if (notes.isNotEmpty()) {
-                Box(Modifier.align(Alignment.Center).offset(6.dp, (-6).dp).size(7.dp).clip(CircleShape).background(pal.acc))
-            }
+        Spacer(Modifier.width(4.dp))
+        Box {
+            Glyph("notifications", size = 19.dp, fill = notes.isNotEmpty())
+            if (notes.isNotEmpty()) Box(Modifier.align(Alignment.TopEnd).offset(2.dp, (-1).dp).size(7.dp).clip(CircleShape).background(pal.acc))
         }
-        if (withClock) ClockPiece(corners(Rad.joined, Rad.container, Rad.container, Rad.joined))
     }
 }
 
 @Composable
-private fun ClockPiece(shape: androidx.compose.ui.graphics.Shape) {
+private fun BatteryChip(ui: Ui) {
+    Row(
+        Modifier.fillMaxHeight().clip(RoundedCornerShape(10.dp)).clickable { ui.toggle(Layer.Deck) }.padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Battery()
+        Num("${Status.battery}", size = 13.sp)
+    }
+}
+
+/** The time in bold, and (with [date]) the day after it, "Wed 18" when [short]. Tap for Clock. */
+@Composable
+private fun ClockText(date: Boolean, short: Boolean = false) {
+    val pal = LocalPal.current
     val ctx = LocalContext.current
     val now = rememberNow()
-    Piece(Modifier.height(36.dp).clickable { Actions.clock(ctx) }, shape) {
-        Num(clockText(now), Modifier.align(Alignment.Center).padding(horizontal = 12.dp), size = 15.sp)
+    Row(
+        Modifier.fillMaxHeight().clip(RoundedCornerShape(10.dp)).clickable { Actions.clock(ctx) }.padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Title(clockText(now), size = 16.sp)
+        if (date) {
+            Spacer(Modifier.width(8.dp))
+            Lbl(now.format(DateTimeFormatter.ofPattern(if (short) "EEE d" else "EEE d MMM")), size = 12.5.sp, color = pal.sub, weight = FontWeight.Medium)
+        }
     }
 }
 

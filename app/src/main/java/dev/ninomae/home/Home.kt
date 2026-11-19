@@ -3,7 +3,6 @@ package dev.ninomae.home
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import android.os.SystemClock
 import android.text.format.DateFormat
@@ -303,11 +302,9 @@ fun Home(st: HomeState, ui: Ui) {
         if (ui.deck > 0.001f || ui.layer == Layer.Deck) {
             Box(insets) {
                 Deck(
-                    st, ui, ui.deck,
+                    st, ui, ui.deck, compact,
                     Modifier
-                        .align(Alignment.TopEnd)
-                        .then(if (compact) Modifier.fillMaxWidth() else Modifier.width(410.dp))
-                        .fillMaxHeight()
+                        .fillMaxSize()
                         .windowInsetsPadding(WindowInsets.displayCutout.union(WindowInsets.statusBars).only(WindowInsetsSides.Top))
                         .padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 10.dp)
                         .deckDrag(ui),

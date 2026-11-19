@@ -153,6 +153,9 @@ class NotifService : NotificationListenerService() {
         notes.value = list.asSequence()
             .filter { it.isClearable && !it.isOngoing }
             .filter { it.notification.flags and Notification.FLAG_GROUP_SUMMARY == 0 }
+            // Samsung's "Now Bar" items (System UI's MediaOngoingActivity when music starts, and the like) aren't
+            // flagged ongoing, but carry android.ongoingActivityNoti.* extras. They're not meant to be read.
+            .filter { sbn -> sbn.notification.extras.keySet().none { it.startsWith("android.ongoingActivityNoti") } }
             .map { sbn ->
                 val n = sbn.notification
                 val ex = n.extras
@@ -270,4 +273,5 @@ object Media {
 
     fun next() = now.value?.controller?.transportControls?.skipToNext()
     fun prev() = now.value?.controller?.transportControls?.skipToPrevious()
+    fun seek(ms: Long) = now.value?.controller?.transportControls?.seekTo(ms)
 }

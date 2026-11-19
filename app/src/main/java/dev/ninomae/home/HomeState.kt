@@ -66,7 +66,6 @@ class HomeState private constructor(private val ctx: Context) {
     }
 
     val prefs = ctx.getSharedPreferences("home", Context.MODE_PRIVATE)
-    val appContext: Context get() = ctx
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val launcherApps = ctx.getSystemService(LauncherApps::class.java)
     private val users = ctx.getSystemService(UserManager::class.java)
