@@ -28,6 +28,7 @@ import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import androidx.compose.ui.graphics.toArgb
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
@@ -216,6 +217,8 @@ class HomeState private constructor(private val ctx: Context) {
         loadJob?.cancel()
         loadJob = scope.launch {
             if (!first) kotlinx.coroutines.delay(300)
+            val t0 = android.os.SystemClock.elapsedRealtime()
+            val drawnBefore = IconCache.drawn.get()
             val list = withContext(Dispatchers.Default) {
                 val px = (64 * ctx.resources.displayMetrics.density).toInt()
                 // Icons are drawn (and themed masks worked out) on all cores at once; it's the slow part of a cold start.
@@ -226,6 +229,8 @@ class HomeState private constructor(private val ctx: Context) {
                 }.awaitAll().sortedBy { it.label.lowercase() }
             }
             apps = list
+            android.util.Log.i("Ninomae", "apps: ${list.size} in ${android.os.SystemClock.elapsedRealtime() - t0} ms, ${IconCache.drawn.get() - drawnBefore} icons drawn, the rest cached")
+            withContext(Dispatchers.IO) { IconCache.prune(ctx, list.map { it.key }.toSet()) }
             firstRunDefaults()
             homeDefaults()
         }
@@ -234,8 +239,10 @@ class HomeState private constructor(private val ctx: Context) {
     private fun entry(info: LauncherActivityInfo, user: UserHandle, px: Int): AppEntry {
         val serial = users.getSerialNumberForUser(user)
         val key = "${info.componentName.flattenToShortString()}#$serial"
-        val stamp = "${info.applicationInfo.sourceDir}|${iconPack}"
-        val r = rendered[key]?.takeIf { it.stamp == stamp } ?: run {
+        val stamp = "${info.applicationInfo.sourceDir}|${iconPack}|$px"
+        val r = rendered[key]?.takeIf { it.stamp == stamp } ?: IconCache.read(ctx, key, stamp)?.let {
+            Rendered(stamp, it.icon.asImageBitmap(), Color(it.tint), it.mono?.asImageBitmap(), it.installed).also { r -> rendered[key] = r }
+        } ?: run {
             val own = info.getIcon(0)
             val packed = Icons.fromPack(ctx, iconPack, info.componentName)
             val base = packed ?: own
@@ -246,7 +253,10 @@ class HomeState private constructor(private val ctx: Context) {
             val raw = Icons.rawIcon(ctx, info)
             val mono = Icons.monochrome(own, px) ?: raw?.let { Icons.monochrome(it, px) }
                 ?: Icons.autoMonochrome(raw ?: own, px)
-            Rendered(stamp, drawn.asImageBitmap(), averageColour(drawn), mono?.asImageBitmap(), installed)
+            val tint = averageColour(drawn)
+            IconCache.drawn.incrementAndGet()
+            IconCache.write(ctx, key, IconCache.Entry(stamp, drawn, tint.toArgb(), mono, installed))
+            Rendered(stamp, drawn.asImageBitmap(), tint, mono?.asImageBitmap(), installed)
                 .also { rendered[key] = it }
         }
         return AppEntry(

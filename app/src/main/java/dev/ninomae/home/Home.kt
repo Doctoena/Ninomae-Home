@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import android.os.SystemClock
 import android.text.format.DateFormat
@@ -425,25 +424,24 @@ private fun EditBar(st: HomeState, ui: Ui) {
                 label = "editbar",
             ) { id ->
                 val it = id?.let { i -> st.home.firstOrNull { h -> h.id == i } }
-                if (it != null) PickedCard(st, ui, it) else EditTools(ui)
+                if (it != null) PickedCard(st, ui, it) else EditTools(st, ui)
             }
         }
     }
 }
 
 @Composable
-private fun EditTools(ui: Ui) {
+private fun EditTools(st: HomeState, ui: Ui) {
     val pal = LocalPal.current
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.clip(RoundedCornerShape(16.dp)).background(pal.l1.copy(alpha = 0.75f)).border(1.dp, glassEdge(), RoundedCornerShape(16.dp))
-                .padding(horizontal = 14.dp, vertical = 7.dp),
+            Modifier.frosted(st, RoundedCornerShape(12.dp), wash = 0.4f, edge = 0.18f).padding(horizontal = 14.dp, vertical = 7.dp),
         ) { Lbl("Tap to change · hold to move", size = 12.sp) }
         Spacer(Modifier.height(34.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
-                Modifier.height(62.dp).clip(RoundedCornerShape(31.dp)).background(pal.l1.copy(alpha = 0.78f))
-                    .border(1.dp, glassEdge(), RoundedCornerShape(31.dp)).padding(horizontal = 8.dp),
+                // The dock's glass and squircle shape, not a solid capsule.
+                Modifier.height(62.dp).frosted(st, RoundedCornerShape(22.dp), wash = 0.26f, edge = 0.2f).padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 EditTool("widgets", "Widgets") { ui.layer = Layer.Widgets }
@@ -451,7 +449,7 @@ private fun EditTools(ui: Ui) {
                 EditTool("tune", "Settings") { ui.layer = Layer.Settings }
             }
             Box(
-                Modifier.size(62.dp).clip(CircleShape).background(pal.acc).pressScale().clickable { ui.editing = false },
+                Modifier.size(62.dp).clip(RoundedCornerShape(20.dp)).background(pal.acc).pressScale().clickable { ui.editing = false },
                 contentAlignment = Alignment.Center,
             ) { Glyph("check", size = 28.dp, color = pal.ink) }
         }
@@ -461,7 +459,7 @@ private fun EditTools(ui: Ui) {
 @Composable
 private fun EditTool(glyph: String, label: String, onClick: () -> Unit) {
     Column(
-        Modifier.width(78.dp).clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick).padding(vertical = 6.dp),
+        Modifier.width(78.dp).clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Glyph(glyph, size = 22.dp)
@@ -493,8 +491,7 @@ private fun PickedCard(st: HomeState, ui: Ui, item: HomeItem) {
     }
     val about = if (item.resizable) "${item.w} × ${item.h} · drag the edges to resize" else "Hold to move it"
     Column(
-        Modifier.width(380.dp).clip(RoundedCornerShape(30.dp)).background(pal.l1.copy(alpha = 0.85f))
-            .border(1.dp, glassEdge(), RoundedCornerShape(30.dp)).padding(12.dp),
+        Modifier.width(380.dp).frosted(st, RoundedCornerShape(26.dp), wash = 0.4f, edge = 0.2f).padding(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (app != null) GlassIcon(app, 38.dp) else Box(
@@ -507,7 +504,7 @@ private fun PickedCard(st: HomeState, ui: Ui, item: HomeItem) {
                 Lbl(about, size = 11.sp, color = pal.sub)
             }
             Box(
-                Modifier.size(42.dp).clip(CircleShape).background(pal.acc).clickable { ui.selected = null },
+                Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(pal.acc).clickable { ui.selected = null },
                 contentAlignment = Alignment.Center,
             ) { Glyph("check", size = 22.dp, color = pal.ink) }
         }
