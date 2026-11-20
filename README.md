@@ -38,6 +38,12 @@ If you change the wallpaper in another app, Ninomae notices: the glass goes plai
 - **Uninstalling** an app takes it off everywhere: home, folders, the dock, pairs and tags.
 - **Notifications** show as a small rose bar under the app's icon, the same everywhere.
 
+## The edge sidebar
+
+- **Slide up along the edge** of the home screen (left or right, your choice) and a slim glass rail of your own apps grows out of it, at your thumb or in the middle.
+- Keep your finger down and glide: the app under it swells on a soft rose glow, its neighbours a little, and its name shows beside the rail. **Lift to open it**, or lift off the rail and tap.
+- Its apps are its own, separate from the dock. Hold any app → **Add to edge**, or set it all up in **Settings → Edge sidebar** (drag to reorder, pick apps, switch it off).
+
 ## Edit mode and widgets
 
 <p align="center">

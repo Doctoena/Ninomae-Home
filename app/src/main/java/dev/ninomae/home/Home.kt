@@ -82,7 +82,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
-enum class Layer { None, Deck, Apps, Menu, PairMenu, PairMaker, Settings, Widgets, Folder, Rename, Tags, TagEdit }
+enum class Layer { None, Deck, Apps, Menu, PairMenu, PairMaker, Settings, Widgets, Folder, Rename, Tags, TagEdit, Edge }
 
 /** Which overlay is open, what's being held or dragged, and where the grid and dock sit. */
 class Ui {
@@ -107,6 +107,10 @@ class Ui {
     var backup: () -> Unit = {}
     var pickWallpaper: () -> Unit = {}
     var restore: () -> Unit = {}
+
+    /** The edge sidebar: where its top sits (root px) and the icon under the finger (-1 for none). */
+    var edgeTop by mutableFloatStateOf(0f)
+    var edgeSel by mutableIntStateOf(-1)
 
     /** Which widget each stack is showing (for taking one out). */
     val stackPage = androidx.compose.runtime.mutableStateMapOf<String, Int>()
@@ -257,7 +261,9 @@ class Ui {
 
 @Composable
 fun Home(st: HomeState, ui: Ui) {
-    BoxWithConstraints(Modifier.fillMaxSize().dragTracker(st, ui)) {
+    val ctxRoot = LocalContext.current
+    val tick = rememberTick()
+    BoxWithConstraints(Modifier.fillMaxSize().dragTracker(st, ui).edgeTracker(st, ui, tick) { Actions.open(ctxRoot, st, it) }) {
         val compact = maxWidth < 600.dp
         val screenH = maxHeight
         val screenW = maxWidth
@@ -290,8 +296,9 @@ fun Home(st: HomeState, ui: Ui) {
 
         val open = ui.layer != Layer.None
         val floating = ui.layer == Layer.Menu || ui.layer == Layer.PairMenu
-        val panel = open && !floating && ui.layer != Layer.Deck && ui.layer != Layer.Apps && ui.layer != Layer.Settings && ui.layer != Layer.Widgets
-        val panelDim by animateFloatAsState(if (ui.inFolder) 0.22f else if (panel) 0.4f else if (floating) 0.18f else 0f, label = "dim")
+        val edge = ui.layer == Layer.Edge
+        val panel = open && !floating && !edge && ui.layer != Layer.Deck && ui.layer != Layer.Apps && ui.layer != Layer.Settings && ui.layer != Layer.Widgets
+        val panelDim by animateFloatAsState(if (ui.inFolder) 0.22f else if (panel) 0.4f else if (floating) 0.18f else if (edge) 0.14f else 0f, label = "dim")
         val dim = maxOf(panelDim, ui.deck * 0.72f, ui.sheet * 0.12f)
         // With the frosted wallpaper, the sheet hides the desktop outright, so it only needs blurring under the deck.
         val behind = maxOf(ui.deck, if (st.glass == null) ui.sheet else 0f)
@@ -376,6 +383,10 @@ fun Home(st: HomeState, ui: Ui) {
                 TagEditPanel(st, ui, Modifier.width(minOf(screenW - 16.dp, 400.dp)))
             }
         }
+
+        // ---------- the edge sidebar (V2a) ----------
+        val edgeP by animateFloatAsState(if (edge) 1f else 0f, spring(0.86f, 600f), label = "edge")
+        if (edgeP > 0.001f) EdgePanel(st, ui, { edgeP }) { Actions.open(ctxRoot, st, it) }
 
         // ---------- pair maker: full screen, on the same glass ----------
         val pairP by animateFloatAsState(if (ui.layer == Layer.PairMaker) 1f else 0f, spring(1f, 380f), label = "pair")

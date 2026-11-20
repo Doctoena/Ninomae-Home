@@ -159,6 +159,29 @@ class HomeState private constructor(private val ctx: Context) {
         private set
     var doubleTapLock by mutableStateOf(prefs.getBoolean("doubleTapLock", true))
         private set
+    /** The edge sidebar (V2a): slide up along an edge of the home screen for its own list of apps. */
+    var edgeOn by mutableStateOf(prefs.getBoolean("edgeOn", true))
+        private set
+    /** Which edge: true right, false left. */
+    var edgeRight by mutableStateOf(prefs.getBoolean("edgeRight", true))
+        private set
+    var edgeApps by mutableStateOf(list("edgeApps"))
+        private set
+    fun updateEdgeOn(v: Boolean) { edgeOn = v; prefs.edit().putBoolean("edgeOn", v).apply() }
+    fun updateEdgeRight(v: Boolean) { edgeRight = v; prefs.edit().putBoolean("edgeRight", v).apply() }
+    /** Where it opens: at your thumb (false) or always in the middle of the screen (true). */
+    var edgeMiddle by mutableStateOf(prefs.getBoolean("edgeMiddle", false))
+        private set
+    fun updateEdgeMiddle(v: Boolean) { edgeMiddle = v; prefs.edit().putBoolean("edgeMiddle", v).apply() }
+    fun isOnEdge(key: String) = key in edgeApps
+    fun toggleEdge(key: String) { edgeApps = if (key in edgeApps) edgeApps - key else edgeApps + key; saveList("edgeApps", edgeApps) }
+    /** Move an app in the edge list one place up (-1) or down (+1). */
+    fun moveEdge(key: String, dir: Int) {
+        val i = edgeApps.indexOf(key); val j = i + dir
+        if (i < 0 || j !in edgeApps.indices) return
+        edgeApps = edgeApps.toMutableList().apply { add(j, removeAt(i)) }
+        saveList("edgeApps", edgeApps)
+    }
     var searchCalendar by mutableStateOf(prefs.getBoolean("searchCalendar", true))
         private set
     var searchFiles by mutableStateOf(prefs.getBoolean("searchFiles", true))
@@ -327,7 +350,7 @@ class HomeState private constructor(private val ctx: Context) {
                     "folder" -> addAll(item.apps)
                 }
             }
-            addAll(pinned); addAll(recent); addAll(hidden); addAll(launches.keys); addAll(renames.keys)
+            addAll(pinned); addAll(edgeApps); addAll(recent); addAll(hidden); addAll(launches.keys); addAll(renames.keys)
             pairs.forEach { add(it.left); add(it.right) }
             tags.forEach { addAll(it.apps) }
         }
@@ -382,6 +405,7 @@ class HomeState private constructor(private val ctx: Context) {
             }
         })
         pinned = fixAll(pinned); saveList("pinned", pinned)
+        edgeApps = fixAll(edgeApps); saveList("edgeApps", edgeApps)
         recent = fixAll(recent); saveList("recent", recent)
         hidden = hidden.mapNotNull(::fix).toSet(); saveList("hidden", hidden.toList())
         renames = renames.mapNotNull { (k, v) -> fix(k)?.let { it to v } }.toMap()
@@ -401,6 +425,12 @@ class HomeState private constructor(private val ctx: Context) {
     }
 
     private fun firstRunDefaults() {
+        if (!prefs.contains("edgeApps") && apps.isNotEmpty()) {
+            // The edge sidebar starts with your most opened apps (or the first few A–Z on a new phone).
+            val byUse = apps.filter { it.key !in hidden }.sortedByDescending { launches[it.key] ?: 0 }
+            edgeApps = byUse.take(6).map { it.key }
+            saveList("edgeApps", edgeApps)
+        }
         if (prefs.contains("pinned") || apps.isEmpty()) return
         val pm = ctx.packageManager
         fun pkgFor(i: Intent) = pm.resolveActivity(i, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName

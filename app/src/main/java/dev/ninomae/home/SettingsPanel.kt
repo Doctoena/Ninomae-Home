@@ -1,5 +1,10 @@
 package dev.ninomae.home
 
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.zIndex
 import android.Manifest
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -68,6 +73,7 @@ private val CATS = listOf(
     Category("look", "palette", "Look"),
     Category("home", "grid_view", "Home screen"),
     Category("gestures", "swipe", "Gestures"),
+    Category("edge", "view_sidebar", "Edge sidebar"),
     Category("search", "search", "Search"),
     Category("glance", "event", "At a glance"),
     Category("bar", "smartphone", "Status bar"),
@@ -95,6 +101,8 @@ private val INDEX = listOf(
     Entry("gestures", "swipe_down", "Swipe down", "deck notifications panel"),
     Entry("gestures", "swipe_up", "Swipe up", "drawer all apps"),
     Entry("gestures", "touch_app", "Double-tap to lock", "lock screen off"),
+    Entry("edge", "view_sidebar", "Edge sidebar", "side edge slide shortcuts favourites rail"),
+    Entry("edge", "swap_horiz", "Edge sidebar side", "left right"),
     Entry("search", "calculate", "Sums and conversions", "maths calculator units"),
     Entry("search", "person_search", "Contacts in search", "people call text"),
     Entry("search", "event", "Calendar in search", "events appointments"),
@@ -260,6 +268,26 @@ private fun Bento(st: HomeState, compact: Boolean, open: (String) -> Unit) {
                 }
             }
         }
+        EdgeTile(st) { open("edge") }
+    }
+}
+
+/** A wide tile under the rest: the edge sidebar, with what it's set to. */
+@Composable
+private fun EdgeTile(st: HomeState, onClick: () -> Unit) {
+    val pal = LocalPal.current
+    val state = if (!st.edgeOn) "Off" else listOf("On", if (st.edgeRight) "right" else "left", st.edgeList().size.let { if (it == 1) "1 app" else "$it apps" }).joinToString(" · ")
+    Row(
+        Modifier.fillMaxWidth().height(64.dp).glassPiece(RoundedCornerShape(22.dp)).pressScale(0.98f).clickable(onClick = onClick).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        GlassBadge("view_sidebar")
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Lbl("Edge sidebar", size = 15.sp, weight = FontWeight.Medium)
+            Lbl(state, size = 11.sp, color = pal.sub)
+        }
+        Glyph("north_east", size = 16.dp, color = pal.dim)
     }
 }
 
@@ -376,6 +404,7 @@ private fun PageBody(st: HomeState, ui: Ui, p: String) {
             { Row3("swipe_up", "Swipe up", "Opens all apps, following your finger. Swipe down there to close") {} },
             { Row3("touch_app", "Double-tap to lock", "Uses accessibility") { GSwitch(st.doubleTapLock) { st.updateDoubleTapLock(!st.doubleTapLock) } } },
         )
+        "edge" -> EdgePage(st)
         "search" -> Rows(
             { Row3("calculate", "Sums and conversions", "Type 12*7, 15% of 80, or 5 km to mi") {} },
             {
@@ -723,5 +752,133 @@ private fun Radio(on: Boolean) {
     val pal = LocalPal.current
     Box(Modifier.size(20.dp).clip(CircleShape).background(if (on) pal.acc else glass(0.14f)), contentAlignment = Alignment.Center) {
         if (on) Box(Modifier.size(8.dp).clip(CircleShape).background(pal.ink))
+    }
+}
+
+/**
+ * The edge sidebar's own page: a preview with the switch, which side and where it opens, then its apps
+ * (drag the handle to reorder, × to take one off) and Add apps, which opens a picker right here.
+ */
+@Composable
+private fun EdgePage(st: HomeState) {
+    val pal = LocalPal.current
+    val density = LocalDensity.current
+    var adding by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // ---------- preview + switch ----------
+        Row(
+            Modifier.fillMaxWidth().glassPiece(corners(22.dp, 22.dp, 6.dp, 6.dp)).padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box {
+                HomePreview(st, 84.dp)
+                // The rail, in miniature, on its side of the little phone.
+                Column(
+                    Modifier.align(if (st.edgeRight) Alignment.CenterEnd else Alignment.CenterStart)
+                        .clip(if (st.edgeRight) corners(8.dp, 0.dp, 0.dp, 8.dp) else corners(0.dp, 8.dp, 8.dp, 0.dp))
+                        .background(pal.l0.copy(alpha = 0.85f)).padding(horizontal = 5.dp, vertical = 6.dp)
+                        .graphicsLayer { alpha = if (st.edgeOn) 1f else 0.35f },
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    repeat(5) { i -> Box(Modifier.size(10.dp).clip(RoundedCornerShape(3.dp)).background(if (i == 2) pal.acc else pal.sub.copy(alpha = 0.6f))) }
+                }
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Title("Slide up along the edge", size = 17.sp)
+                Spacer(Modifier.height(4.dp))
+                Lbl("Glide onto an app and lift to open it. The ones near your finger swell, and its name shows beside the rail.", size = 12.sp, color = pal.sub, maxLines = 4)
+                Spacer(Modifier.height(14.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Lbl(if (st.edgeOn) "On" else "Off", Modifier.weight(1f), size = 14.sp)
+                    GSwitch(st.edgeOn) { st.updateEdgeOn(!st.edgeOn) }
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().height(60.dp).glassPiece(RoundedCornerShape(6.dp)).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Lbl("Side", Modifier.weight(1f), size = 15.sp)
+            Segs(listOf("Left", "Right"), if (st.edgeRight) 1 else 0) { st.updateEdgeRight(it == 1) }
+        }
+        Row(Modifier.fillMaxWidth().height(60.dp).glassPiece(corners(6.dp, 6.dp, 22.dp, 22.dp)).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Lbl("Opens", Modifier.weight(1f), size = 15.sp)
+            Segs(listOf("At your thumb", "Middle"), if (st.edgeMiddle) 1 else 0) { st.updateEdgeMiddle(it == 1) }
+        }
+
+        // ---------- its apps ----------
+        Row(Modifier.padding(start = 4.dp, top = 18.dp, bottom = 8.dp), verticalAlignment = Alignment.Bottom) {
+            Title("Its apps", size = 18.sp)
+            Spacer(Modifier.width(10.dp))
+            Lbl("drag the handle to reorder", Modifier.padding(bottom = 2.dp), size = 12.sp, color = pal.dim)
+        }
+        val apps = st.edgeList()
+        val step = with(density) { (54.dp + 4.dp).toPx() }
+        var dragKey by remember { mutableStateOf<String?>(null) }
+        var dragY by remember { mutableFloatStateOf(0f) }
+        apps.forEachIndexed { i, app -> androidx.compose.runtime.key(app.key) {
+            val top = if (i == 0) 22.dp else 6.dp
+            val dragging = dragKey == app.key
+            Row(
+                Modifier.fillMaxWidth().height(54.dp)
+                    .zIndex(if (dragging) 1f else 0f)
+                    .graphicsLayer { if (dragging) { translationY = dragY; scaleX = 1.02f; scaleY = 1.02f } }
+                    .glassPiece(corners(top, top, 6.dp, 6.dp))
+                    .padding(end = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(44.dp, 54.dp).pointerInput(app.key) {
+                        detectVerticalDragGestures(
+                            onDragStart = { dragKey = app.key; dragY = 0f },
+                            onDragEnd = { dragKey = null; dragY = 0f },
+                            onDragCancel = { dragKey = null; dragY = 0f },
+                        ) { c, dy ->
+                            c.consume()
+                            dragY += dy
+                            // Past half a row: it swaps with its neighbour and the offset carries on from there.
+                            if (dragY > step / 2) { st.moveEdge(app.key, 1); dragY -= step }
+                            if (dragY < -step / 2) { st.moveEdge(app.key, -1); dragY += step }
+                        }
+                    },
+                    contentAlignment = Alignment.Center,
+                ) { Glyph("drag_indicator", size = 20.dp, color = if (dragging) pal.acc else pal.dim) }
+                GlassIcon(app, 34.dp)
+                Spacer(Modifier.width(12.dp))
+                Lbl(app.label, Modifier.weight(1f), size = 15.sp)
+                Box(Modifier.size(40.dp).clip(CircleShape).clickable { st.toggleEdge(app.key) }, contentAlignment = Alignment.Center) {
+                    Glyph("close", size = 18.dp, color = pal.sub)
+                }
+            }
+        } }
+        // ---------- add apps: a picker right here ----------
+        Row(
+            Modifier.fillMaxWidth().height(54.dp).glassPiece(corners(if (apps.isEmpty()) 22.dp else 6.dp, if (apps.isEmpty()) 22.dp else 6.dp, if (adding) 6.dp else 22.dp, if (adding) 6.dp else 22.dp))
+                .clickable { adding = !adding }.padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(34.dp).clip(RoundedCornerShape(12.dp)).background(pal.acc), contentAlignment = Alignment.Center) {
+                Glyph(if (adding) "check" else "add", size = 20.dp, color = pal.ink)
+            }
+            Spacer(Modifier.width(12.dp))
+            Lbl(if (adding) "Done" else "Add apps", Modifier.weight(1f), size = 15.sp)
+        }
+        if (adding) {
+            val all = remember(st.apps, st.hidden) { st.apps.filter { it.key !in st.hidden } }
+            Column(Modifier.fillMaxWidth().glassPiece(corners(6.dp, 6.dp, 22.dp, 22.dp)).padding(6.dp)) {
+                all.forEach { app ->
+                    val inside = st.isOnEdge(app.key)
+                    Row(
+                        Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(14.dp))
+                            .background(if (inside) pal.acc.copy(alpha = 0.14f) else Color.Transparent)
+                            .clickable { st.toggleEdge(app.key) }.padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        GlassIcon(app, 34.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Lbl(app.label, Modifier.weight(1f))
+                        Radio(inside)
+                    }
+                }
+            }
+        }
     }
 }

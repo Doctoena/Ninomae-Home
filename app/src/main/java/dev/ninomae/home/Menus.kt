@@ -64,6 +64,9 @@ fun AppMenu(st: HomeState, ui: Ui, compact: Boolean) {
         MenuAction("splitscreen_left", "Split screen") { ui.close(); Actions.split(ctx, st, app, null) },
         MenuAction("pip", "Pop-up window") { ui.close(); Actions.window(ctx, st, app) },
         MenuAction("join", "Make a pair") { ui.newPair(app.key) },
+        if (st.edgeOn) MenuAction(if (st.isOnEdge(app.key)) "playlist_remove" else "playlist_add", if (st.isOnEdge(app.key)) "Off the edge" else "Add to edge") {
+            st.toggleEdge(app.key); ui.back()
+        } else null,
         place ?: MenuAction("info", "App info") { Actions.info(ctx, app); ui.close() },
     )
     val right = listOf(
