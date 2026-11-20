@@ -113,16 +113,20 @@ On a tablet-sized screen, like a foldable's inner screen, the layout becomes a d
 - A **control deck** pulled down from the top: a rail of toggles (Wi-Fi, Bluetooth, location, Do not disturb, rotation, torch, screenshot, lock), the player tinted by its album art with brightness and volume, and notifications grouped by app.
 - Folding or unfolding puts each screen back on the page it was on.
 
+## Install
+
+Download the APK from the [latest release](https://github.com/Doctoena/Ninomae-Home/releases/latest) and open it on your phone (Android 12 or newer). Android asks you to allow installs from wherever you opened it. Then make it your home app: Android asks the first time you press Home, or use **Settings → Access → Home app** in Ninomae.
+
 ## Build
 
-Needs a JDK 17 or newer, and Android 12 or newer on the phone. The release build is the one to use day to day, since it's shrunk and much faster than a debug build:
+Needs a JDK 17 or newer. The release build is the one to use day to day, since it's shrunk and much faster than a debug build:
 
 ```
 ./gradlew assembleRelease
 adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 
-Then make it your home app: Android asks the first time you press Home, or use **Settings → Access → Home app** in Ninomae.
+A release build is signed with your own key if `~/.gradle/gradle.properties` names one (`NINOMAE_STORE_FILE`, `NINOMAE_STORE_PASSWORD`, `NINOMAE_KEY_ALIAS`, `NINOMAE_KEY_PASSWORD`), and with the debug key otherwise. A build you make yourself can't update the one from Releases (they're signed differently), so uninstall one before installing the other.
 
 ## Access it asks for
 

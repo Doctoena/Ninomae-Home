@@ -11,15 +11,28 @@ android {
         applicationId = "dev.ninomae.home"
         minSdk = 31 // wallpaper colours (Material You)
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.5.0"
+        versionCode = 6
+        versionName = "1.0.0"
+    }
+
+    // The release key lives outside the repo: its path and passwords come from ~/.gradle/gradle.properties
+    // (NINOMAE_STORE_FILE, NINOMAE_STORE_PASSWORD, NINOMAE_KEY_ALIAS, NINOMAE_KEY_PASSWORD).
+    // Without them, a release build is signed with the debug key so anyone can still build and install it.
+    val releaseKey = providers.gradleProperty("NINOMAE_STORE_FILE").orNull?.let(::file)?.takeIf { it.exists() }
+    signingConfigs {
+        if (releaseKey != null) create("release") {
+            storeFile = releaseKey
+            storePassword = providers.gradleProperty("NINOMAE_STORE_PASSWORD").get()
+            keyAlias = providers.gradleProperty("NINOMAE_KEY_ALIAS").get()
+            keyPassword = providers.gradleProperty("NINOMAE_KEY_PASSWORD").get()
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
