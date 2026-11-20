@@ -35,7 +35,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -168,9 +167,13 @@ private fun FolderHeader(st: HomeState, folder: HomeItem, adding: Boolean, full:
     val pal = LocalPal.current
     var name by remember(folder.id) { mutableStateOf(folder.name) }
     val focus = remember { FocusRequester() }
+    // Saved once, when the folder closes, rather than rewriting the whole home layout on every key.
+    androidx.compose.runtime.DisposableEffect(folder.id) {
+        onDispose { if (name != folder.name && st.home.any { it.id == folder.id }) st.renameFolder(folder.id, name) }
+    }
     Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 14.dp, top = 16.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         BasicTextField(
-            name, { name = it.take(24); st.renameFolder(folder.id, name) },
+            name, { name = it.take(24) },
             Modifier.width(androidx.compose.foundation.layout.IntrinsicSize.Min).widthIn(min = 40.dp, max = 200.dp).focusRequester(focus),
             singleLine = true,
             textStyle = TextStyle(color = pal.fg, fontSize = 24.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black),
@@ -280,45 +283,67 @@ private fun FolderPicker(st: HomeState, ui: Ui, folder: HomeItem) {
     }
 }
 
-/** Rename an app: empty puts its own name back. */
+/**
+ * Rename an app (R1a): one piece of glass sitting on the keyboard. Its icon sits in the field, its own
+ * name is a chip to put it back, and the rose tick (or Enter) saves. Empty also puts its own name back.
+ */
 @Composable
 fun RenamePanel(st: HomeState, ui: Ui, modifier: Modifier) {
     val pal = LocalPal.current
     val app = st.app(ui.renameKey) ?: return
-    var text by remember(ui.openCount) { mutableStateOf(app.label) }
-    val big = Rad.normal
-    val j = Rad.joined
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Piece(Modifier.fillMaxWidth().height(60.dp), corners(big, big, j, j), edge = true) {
-            Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                AppIcon(app, 34.dp)
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Title("Rename", size = 16.sp)
-                    Lbl("Its own name is ${app.original}", size = 12.sp, color = pal.sub)
-                }
+    var text by remember(ui.openCount) {
+        mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(app.label, androidx.compose.ui.text.TextRange(0, app.label.length)))
+    }
+    val focus = remember { FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    LaunchedEffect(ui.openCount) { runCatching { focus.requestFocus() }; keyboard?.show() }
+    fun save() { st.rename(app.key, text.text.trim().takeIf { it != app.original }); ui.close() }
+    Column(
+        modifier.frosted(st, RoundedCornerShape(28.dp), wash = 0.6f, edge = 0.2f)
+            .pointerInput(Unit) { detectTapGestures { } }
+            .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(start = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Title("Rename", Modifier.weight(1f), size = 15.sp, color = pal.sub)
+            // Its own name, to put back.
+            Row(
+                Modifier.height(28.dp).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.10f))
+                    .clickable { text = androidx.compose.ui.text.input.TextFieldValue(app.original, androidx.compose.ui.text.TextRange(app.original.length)) }
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Glyph("undo", size = 15.dp, color = pal.acc)
+                Spacer(Modifier.width(5.dp))
+                Lbl(app.original, Modifier.widthIn(max = 150.dp), size = 12.sp)
+                Spacer(Modifier.width(5.dp))
+                Lbl("its own", size = 10.sp, color = pal.dim)
             }
         }
-        Piece(Modifier.fillMaxWidth().height(58.dp), RoundedCornerShape(j), edge = true) {
-            Box(
-                Modifier.fillMaxSize().padding(10.dp).clip(RoundedCornerShape(Rad.segment)).background(pal.l5).padding(horizontal = 12.dp),
-                contentAlignment = Alignment.CenterStart,
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.weight(1f).height(54.dp).clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = 0.10f))
+                    .border(1.5.dp, pal.acc, RoundedCornerShape(18.dp)).padding(horizontal = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                GlassIcon(app, 36.dp)
+                Spacer(Modifier.width(10.dp))
                 BasicTextField(
-                    text, { text = it.take(30) }, Modifier.fillMaxWidth(), singleLine = true,
-                    textStyle = TextStyle(color = pal.fg, fontSize = 15.sp, fontFamily = Sans),
+                    text, { text = it.copy(text = it.text.take(30)) },
+                    Modifier.weight(1f).focusRequester(focus),
+                    singleLine = true,
+                    textStyle = TextStyle(color = pal.fg, fontSize = 17.sp, fontFamily = Sans),
                     cursorBrush = SolidColor(pal.acc),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { save() }),
+                    decorationBox = { inner -> Box { if (text.text.isEmpty()) Lbl(app.original, size = 17.sp, color = pal.dim); inner() } },
                 )
             }
-        }
-        Piece(Modifier.fillMaxWidth().height(56.dp), corners(j, j, big, big), edge = true) {
-            Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                PlainButton("Reset") { st.rename(app.key, null); ui.close() }
-                Spacer(Modifier.weight(1f))
-                PlainButton("Cancel") { ui.close() }
-                Spacer(Modifier.width(6.dp))
-                AccentButton("Save") { st.rename(app.key, text.takeIf { it != app.original }); ui.close() }
-            }
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier.size(54.dp).clip(RoundedCornerShape(18.dp)).background(pal.acc).pressScale().clickable { save() },
+                contentAlignment = Alignment.Center,
+            ) { Glyph("check", size = 26.dp, color = pal.ink) }
         }
     }
 }

@@ -118,18 +118,55 @@ class HomeState private constructor(private val ctx: Context) {
         glass = w.frosted
         wallPreview = w.preview
         wallSeed = w.seed
-        prefs.edit().putInt("wallSeed", w.seed).apply()
+        glassStale = false
+        glassNote = false
+        prefs.edit().putInt("wallSeed", w.seed).putInt("wallId", w.id).putBoolean("glassStale", false).putBoolean("glassNote", false).apply()
+    }
+
+    /** The wallpaper was changed outside Ninomae, so the glass went plain (G1b): Look keeps a dot until it's picked here. */
+    var glassStale by mutableStateOf(prefs.getBoolean("glassStale", false))
+        private set
+    /** The one-time note above the dock about it. */
+    var glassNote by mutableStateOf(prefs.getBoolean("glassNote", false))
+        private set
+
+    fun dismissGlassNote() { glassNote = false; prefs.edit().putBoolean("glassNote", false).apply() }
+
+    /** On resume: has another app (Samsung's wallpaper picker, say) set a new wallpaper since ours? */
+    fun checkWallpaper() {
+        if (glass == null && wallPreview == null) return
+        val id = Glass.currentId(ctx)
+        if (id < 0) return
+        val known = prefs.getInt("wallId", -1)
+        // Wallpapers set before ids were kept: take the current one as ours.
+        if (known == -1) { android.util.Log.i("Ninomae", "wallpaper id $id kept as ours"); prefs.edit().putInt("wallId", id).apply(); return }
+        if (id == known) return
+        android.util.Log.i("Ninomae", "wallpaper changed outside Ninomae ($known -> $id): glass goes plain")
+        Glass.forget(ctx)
+        glass = null
+        wallPreview = null
+        glassStale = true
+        glassNote = true
+        prefs.edit().putInt("wallId", id).putBoolean("glassStale", true).putBoolean("glassNote", true).apply()
     }
     var dockRecentsOn by mutableStateOf(prefs.getBoolean("dockRecents", true))
         private set
-    /** 0 sidebar, 1 Samsung's notification panel, 2 nothing. */
-    var swipeDown by mutableIntStateOf(prefs.getInt("swipeDownCover", 1))
+    /** 0 the deck, 1 Samsung's notification panel, 2 nothing. Until chosen, the cover follows its bar: ours → the deck. */
+    var swipeDown by mutableIntStateOf(prefs.getInt("swipeDownCover", if (prefs.getBoolean("barCover", false)) 0 else 1))
         private set
     /** Same choice for the inner screen. Cover: Samsung's panel by default; inner: the deck. */
     var swipeDownInner by mutableIntStateOf(prefs.getInt("swipeDownInner2", 0))
         private set
     var doubleTapLock by mutableStateOf(prefs.getBoolean("doubleTapLock", true))
         private set
+    var searchCalendar by mutableStateOf(prefs.getBoolean("searchCalendar", true))
+        private set
+    var searchFiles by mutableStateOf(prefs.getBoolean("searchFiles", true))
+        private set
+    /** Your own drawer tags (T1): an app can have several; they sit in the drawer's rail. */
+    var tags by mutableStateOf(loadTags(prefs))
+        private set
+    fun saveTags(list: List<DrawerTag>) { tags = list; prefs.edit().putString("drawerTags", tagsToJson(list)).apply() }
     var searchContacts by mutableStateOf(prefs.getBoolean("searchContacts", true))
         private set
     /** Locked: nothing on the home screen moves until it's unlocked. */
@@ -230,6 +267,7 @@ class HomeState private constructor(private val ctx: Context) {
             apps = list
             android.util.Log.i("Ninomae", "apps: ${list.size} in ${android.os.SystemClock.elapsedRealtime() - t0} ms, ${IconCache.drawn.get() - drawnBefore} icons drawn, the rest cached")
             withContext(Dispatchers.IO) { IconCache.prune(ctx, list.map { it.key }.toSet()) }
+            forgetRemoved()
             firstRunDefaults()
             homeDefaults()
         }
@@ -272,6 +310,94 @@ class HomeState private constructor(private val ctx: Context) {
             installed = r.installed,
             category = info.applicationInfo.category,
         )
+    }
+
+    /**
+     * Uninstalled apps leave nothing behind: their home tiles, folder places, dock pins, pairs, tags,
+     * renames and counts go. Only when Android says the package is gone for that user, so an SD card
+     * being out or a paused work profile keeps everything. If the package is still there but its
+     * launch activity changed (an update can do that), everything points at the new one instead.
+     */
+    private suspend fun forgetRemoved() {
+        val live = apps.mapTo(HashSet()) { it.key }
+        val refs = HashSet<String>().apply {
+            home.forEach { item ->
+                when (item.type) {
+                    "app" -> item.app?.let(::add)
+                    "folder" -> addAll(item.apps)
+                }
+            }
+            addAll(pinned); addAll(recent); addAll(hidden); addAll(launches.keys); addAll(renames.keys)
+            pairs.forEach { add(it.left); add(it.right) }
+            tags.forEach { addAll(it.apps) }
+        }
+        val shortcuts = home.filter { it.type == "shortcut" }.map { it.pkg to it.userSerial }.toSet()
+        val dead = refs - live
+        if (dead.isEmpty() && shortcuts.isEmpty()) return
+
+        // Is [pkg] still installed for the user with this serial? Unsure counts as yes.
+        val installed = HashMap<Pair<String, Long>, Boolean>()
+        suspend fun there(pkg: String, serial: Long): Boolean = installed.getOrPut(pkg to serial) {
+            withContext(Dispatchers.IO) {
+                val user = users.getUserForSerialNumber(serial) ?: return@withContext false
+                try {
+                    launcherApps.getApplicationInfo(pkg, 0, user) != null
+                } catch (_: PackageManager.NameNotFoundException) {
+                    false
+                } catch (_: Exception) {
+                    true
+                }
+            }
+        }
+
+        val removed = HashSet<String>()
+        val moved = HashMap<String, String>()
+        for (k in dead) {
+            val pkg = k.substringBefore('/')
+            val serial = k.substringAfterLast('#', "").toLongOrNull() ?: continue
+            if (!there(pkg, serial)) removed += k
+            else apps.firstOrNull { it.pkg == pkg && users.getSerialNumberForUser(it.user) == serial }?.let { moved[k] = it.key }
+        }
+        val goneShortcuts = shortcuts.filterTo(HashSet()) { (pkg, serial) -> !there(pkg, serial) }
+        if (removed.isEmpty() && moved.isEmpty() && goneShortcuts.isEmpty()) return
+        android.util.Log.i("Ninomae", "forgetting uninstalled $removed, moved $moved, shortcuts $goneShortcuts")
+
+        fun fix(k: String): String? = if (k in removed) null else moved[k] ?: k
+        fun fixAll(list: List<String>) = list.mapNotNull(::fix).distinct()
+
+        // Home: tiles go, folders shrink (one app left turns back into that app, none and it goes).
+        commit(home.mapNotNull { item ->
+            when (item.type) {
+                "app" -> item.app?.let(::fix)?.let { item.copy(app = it) }
+                "shortcut" -> item.takeIf { (it.pkg to it.userSerial) !in goneShortcuts }
+                "folder" -> {
+                    val left = fixAll(item.apps)
+                    when (left.size) {
+                        0 -> null
+                        1 -> item.copy(type = "app", app = left.first(), apps = emptyList(), name = "")
+                        else -> item.copy(apps = left)
+                    }
+                }
+                else -> item
+            }
+        })
+        pinned = fixAll(pinned); saveList("pinned", pinned)
+        recent = fixAll(recent); saveList("recent", recent)
+        hidden = hidden.mapNotNull(::fix).toSet(); saveList("hidden", hidden.toList())
+        renames = renames.mapNotNull { (k, v) -> fix(k)?.let { it to v } }.toMap()
+        launches = launches.entries.mapNotNull { (k, v) -> fix(k)?.let { it to v } }.groupBy({ it.first }, { it.second }).mapValues { it.value.sum() }
+        prefs.edit()
+            .putString("renames", JSONObject(renames as Map<*, *>).toString())
+            .putString("launches", JSONObject(launches as Map<*, *>).toString())
+            .apply()
+        // A pair missing a side can't open any more.
+        val keptPairs = pairs.mapNotNull { p ->
+            val l = fix(p.left); val r = fix(p.right)
+            if (l == null || r == null || l == r) null else p.copy(left = l, right = r)
+        }
+        if (activePair != null && keptPairs.none { it.id == activePair }) setActive(null)
+        pairs = keptPairs; savePairs()
+        saveTags(tags.map { it.copy(apps = fixAll(it.apps)) })
     }
 
     private fun firstRunDefaults() {
@@ -342,6 +468,13 @@ class HomeState private constructor(private val ctx: Context) {
     }
 
     fun updateLabels(v: Boolean) { labels = v; prefs.edit().putBoolean("labels", v).apply() }
+    init {
+        // Once: a cover with our bar but swipe down still on Samsung's panel (the old default) gets the deck.
+        if (!prefs.getBoolean("swipeFollowsBar", false)) {
+            if (prefs.getBoolean("barCover", false) && swipeDown == 1) updateSwipeDown(true, 0)
+            prefs.edit().putBoolean("swipeFollowsBar", true).apply()
+        }
+    }
     fun updateDots(v: Boolean) { dots = v; prefs.edit().putBoolean("dots", v).apply() }
     fun updateDockRecents(v: Boolean) { dockRecentsOn = v; prefs.edit().putBoolean("dockRecents", v).apply() }
     fun updateSwipeDown(cover: Boolean, v: Int) {
@@ -351,6 +484,8 @@ class HomeState private constructor(private val ctx: Context) {
     fun updateBar(cover: Boolean, own: Boolean) {
         if (cover) barCover = own else barInner = own
         prefs.edit().putBoolean(if (cover) "barCover" else "barInner", own).apply()
+        // With our bar, swipe down should open our deck; with Samsung's, Samsung's panel. "Off" stays off.
+        if ((if (cover) swipeDown else swipeDownInner) != 2) updateSwipeDown(cover, if (own) 0 else 1)
     }
 
     fun updateGlance(calendar: Boolean, weather: Boolean) {
@@ -393,6 +528,8 @@ class HomeState private constructor(private val ctx: Context) {
         true
     }.getOrDefault(false)
 
+    fun updateSearchCalendar(v: Boolean) { searchCalendar = v; prefs.edit().putBoolean("searchCalendar", v).apply() }
+    fun updateSearchFiles(v: Boolean) { searchFiles = v; prefs.edit().putBoolean("searchFiles", v).apply() }
     fun updateSearchContacts(v: Boolean) { searchContacts = v; prefs.edit().putBoolean("searchContacts", v).apply() }
     fun updateLocked(v: Boolean) { locked = v; prefs.edit().putBoolean("locked", v).apply() }
     fun updateColourSource(v: Int) { colourSource = v; prefs.edit().putInt("colourSource", v).apply() }

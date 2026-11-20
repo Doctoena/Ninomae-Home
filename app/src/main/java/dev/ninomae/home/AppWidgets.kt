@@ -172,7 +172,7 @@ fun AndroidWidget(id: Int, wDp: Float, hDp: Float, modifier: Modifier = Modifier
     val ctx = LocalContext.current
     val view = remember(id) { AppWidgets.createView(ctx, id) }
     if (view == null) {
-        Piece(modifier.fillMaxSize(), RoundedCornerShape(Rad.normal)) {
+        Box(modifier.fillMaxSize().frosted(HomeState.get(ctx), RoundedCornerShape(Rad.normal), wash = 0.34f, edge = 0.2f)) {
             Lbl("Widget unavailable", Modifier.align(Alignment.Center), size = 13.sp, color = pal.sub)
         }
         return

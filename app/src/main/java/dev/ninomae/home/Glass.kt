@@ -28,7 +28,17 @@ object Glass {
     fun loadPreview(ctx: Context): ImageBitmap? =
         previewFile(ctx).takeIf { it.exists() }?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() }
 
-    class Set(val frosted: ImageBitmap, val preview: ImageBitmap, val seed: Int)
+    class Set(val frosted: ImageBitmap, val preview: ImageBitmap, val seed: Int, val id: Int)
+
+    /** Android's id for the home screen wallpaper; it changes whenever any app sets a new one (-1 if unknown). */
+    fun currentId(ctx: Context): Int =
+        runCatching { WallpaperManager.getInstance(ctx).getWallpaperId(WallpaperManager.FLAG_SYSTEM) }.getOrDefault(-1)
+
+    /** The wallpaper changed somewhere else: the frosted copy and preview are of the old one, so they go. */
+    fun forget(ctx: Context) {
+        file(ctx).delete()
+        previewFile(ctx).delete()
+    }
 
     /** Sets [uri] as the home screen wallpaper; returns its blurred copy, a small sharp one and its main colour. */
     suspend fun setWallpaper(ctx: Context, uri: Uri): Set? = withContext(Dispatchers.IO) {
@@ -41,13 +51,13 @@ object Glass {
                     d.setTargetSize((info.size.width * k).toInt(), (info.size.height * k).toInt())
                 }
             }
-            WallpaperManager.getInstance(ctx).setBitmap(src, null, true, WallpaperManager.FLAG_SYSTEM)
+            val id = WallpaperManager.getInstance(ctx).setBitmap(src, null, true, WallpaperManager.FLAG_SYSTEM)
             val frosted = frost(src)
             file(ctx).outputStream().use { frosted.compress(Bitmap.CompressFormat.PNG, 100, it) }
             val pw = 480
             val preview = Bitmap.createScaledBitmap(src, pw, (src.height * pw.toFloat() / src.width).toInt().coerceAtLeast(1), true)
             previewFile(ctx).outputStream().use { preview.compress(Bitmap.CompressFormat.JPEG, 90, it) }
-            Set(frosted.asImageBitmap(), preview.asImageBitmap(), seedOf(preview))
+            Set(frosted.asImageBitmap(), preview.asImageBitmap(), seedOf(preview), id)
         }.getOrNull()
     }
 

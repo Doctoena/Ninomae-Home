@@ -124,7 +124,7 @@ fun HomeState.firstFree(screen: Int, w: Int, h: Int, startPage: Int = 0): Triple
 
 // ---------- changes ----------
 
-private fun HomeState.commit(items: List<HomeItem>) {
+internal fun HomeState.commit(items: List<HomeItem>) {
     // Pages left empty in the middle close up.
     val fixed = (0..1).flatMap { screen ->
         val mine = items.filter { it.screen == screen }

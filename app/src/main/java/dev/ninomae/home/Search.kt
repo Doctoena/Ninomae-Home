@@ -22,6 +22,8 @@ sealed interface Answer {
     data class Convert(val from: String, val to: String) : Answer
     data class Contact(val id: Long, val name: String, val number: String?) : Answer
     data class Setting(val name: String, val glyph: String, val action: String) : Answer
+    data class Event(val id: Long, val title: String, val begin: Long, val note: String) : Answer
+    data class File(val id: Long, val name: String, val mime: String?, val note: String) : Answer
 }
 
 object Search {
@@ -172,6 +174,96 @@ object Search {
         Answer.Setting("Developer options", "code", Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
         Answer.Setting("About phone", "info", Settings.ACTION_DEVICE_INFO_SETTINGS),
         Answer.Setting("Wallpaper", "wallpaper", Intent.ACTION_SET_WALLPAPER),
+    )
+
+    // ---------- calendar ----------
+
+    fun canReadCalendar(ctx: Context) = ctx.checkSelfPermission(Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
+
+    /** Events whose title matches, from a month back to a year ahead: upcoming ones first, soonest first. */
+    fun events(ctx: Context, q: String): List<Answer.Event> = runCatching {
+        val now = System.currentTimeMillis()
+        val day = 24 * 3600_000L
+        val uri = android.provider.CalendarContract.Instances.CONTENT_URI.buildUpon()
+            .appendPath((now - 31 * day).toString()).appendPath((now + 366 * day).toString()).build()
+        val cols = arrayOf(
+            android.provider.CalendarContract.Instances.EVENT_ID, android.provider.CalendarContract.Instances.TITLE,
+            android.provider.CalendarContract.Instances.BEGIN, android.provider.CalendarContract.Instances.END,
+            android.provider.CalendarContract.Instances.ALL_DAY,
+        )
+        val out = mutableListOf<Answer.Event>()
+        val time = android.text.format.DateFormat.getTimeFormat(ctx)
+        ctx.contentResolver.query(uri, cols, "${android.provider.CalendarContract.Instances.TITLE} LIKE ?", arrayOf("%$q%"), null)?.use { c ->
+            while (c.moveToNext()) {
+                val begin = c.getLong(2)
+                val allDay = c.getInt(4) == 1
+                val zone = if (allDay) java.time.ZoneOffset.UTC else java.time.ZoneId.systemDefault()
+                val date = java.time.Instant.ofEpochMilli(begin).atZone(zone).toLocalDate()
+                    .format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM"))
+                val note = if (allDay) "$date · All day" else "$date · ${time.format(java.util.Date(begin))} – ${time.format(java.util.Date(c.getLong(3)))}"
+                out += Answer.Event(c.getLong(0), c.getString(1) ?: continue, begin, note)
+            }
+        }
+        out.distinctBy { it.id to it.begin }
+            .sortedWith(compareBy<Answer.Event> { it.begin < now - day }.thenBy { kotlin.math.abs(it.begin - now) })
+            .take(5)
+    }.getOrDefault(emptyList())
+
+    fun openEvent(ctx: Context, e: Answer.Event) = start(
+        ctx,
+        Intent(Intent.ACTION_VIEW, ContentUris.withAppendedId(android.provider.CalendarContract.Events.CONTENT_URI, e.id))
+            .putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, e.begin),
+    )
+
+    // ---------- files (needs All files access) ----------
+
+    fun canReadFiles() = android.os.Environment.isExternalStorageManager()
+
+    /** Files whose name matches, newest first. */
+    fun files(ctx: Context, q: String): List<Answer.File> = runCatching {
+        val uri = android.provider.MediaStore.Files.getContentUri("external")
+        val cols = arrayOf(
+            android.provider.MediaStore.Files.FileColumns._ID, android.provider.MediaStore.Files.FileColumns.DISPLAY_NAME,
+            android.provider.MediaStore.Files.FileColumns.MIME_TYPE, android.provider.MediaStore.Files.FileColumns.RELATIVE_PATH,
+            android.provider.MediaStore.Files.FileColumns.SIZE, android.provider.MediaStore.Files.FileColumns.DATE_MODIFIED,
+        )
+        val args = android.os.Bundle().apply {
+            putString(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION, "${cols[1]} LIKE ? AND ${cols[2]} IS NOT NULL")
+            putStringArray(android.content.ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, arrayOf("%$q%"))
+            putString(android.content.ContentResolver.QUERY_ARG_SQL_SORT_ORDER, "${cols[5]} DESC")
+            putInt(android.content.ContentResolver.QUERY_ARG_LIMIT, 6)
+        }
+        val out = mutableListOf<Answer.File>()
+        ctx.contentResolver.query(uri, cols, args, null)?.use { c ->
+            while (c.moveToNext()) {
+                val folder = c.getString(3)?.trimEnd('/')?.substringAfterLast('/')?.ifBlank { null } ?: "Phone"
+                val size = android.text.format.Formatter.formatShortFileSize(ctx, c.getLong(4))
+                val date = java.time.Instant.ofEpochSecond(c.getLong(5)).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    .format(java.time.format.DateTimeFormatter.ofPattern("d MMM"))
+                out += Answer.File(c.getLong(0), c.getString(1) ?: continue, c.getString(2), "$folder · $size · $date")
+            }
+        }
+        out
+    }.getOrDefault(emptyList())
+
+    fun fileGlyph(mime: String?) = when {
+        mime == null -> "description"
+        mime.startsWith("image/") -> "image"
+        mime.startsWith("video/") -> "movie"
+        mime.startsWith("audio/") -> "music_note"
+        mime == "application/pdf" -> "picture_as_pdf"
+        mime.contains("zip") || mime.contains("compressed") -> "folder_zip"
+        else -> "description"
+    }
+
+    fun openFile(ctx: Context, f: Answer.File) {
+        val uri = android.provider.MediaStore.Files.getContentUri("external", f.id)
+        start(ctx, Intent(Intent.ACTION_VIEW).setDataAndType(uri, f.mime ?: "*/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    }
+
+    fun allowFiles(ctx: Context) = start(
+        ctx,
+        Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${ctx.packageName}")),
     )
 
     fun settings(q: String): List<Answer.Setting> {

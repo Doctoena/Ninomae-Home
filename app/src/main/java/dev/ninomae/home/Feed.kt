@@ -203,7 +203,9 @@ private fun TodayBlock(st: HomeState) {
     val alarm = remember(now.minute) { ctx.getSystemService(android.app.AlarmManager::class.java)?.nextAlarmClock?.triggerTime }
         ?.takeIf { it - System.currentTimeMillis() < 24 * 3600_000L }
     val events = Glance.today
-    val showCard = events.isNotEmpty() || alarm != null || st.glanceCalendar
+    // "Nothing planned" only when the calendar can actually be read.
+    val showCard = events.isNotEmpty() || alarm != null ||
+        (st.glanceCalendar && Glance.has(ctx, android.Manifest.permission.READ_CALENDAR))
     val m = media
     if (!showCard && m == null) return
 

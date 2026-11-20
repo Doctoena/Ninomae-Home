@@ -141,6 +141,8 @@ fun Sheet(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
         }
     }
     LaunchedEffect(view, q.isBlank()) { grid.scrollToItem(0) }
+    // A deleted (or cancelled) tag: back to Most used.
+    LaunchedEffect(st.tags, view) { if (view.startsWith("t-") && st.tags.none { "t-${it.id}" == view }) view = "most" }
 
     val visible = remember(st.apps, st.hidden) { st.apps.filter { it.key !in st.hidden } }
     val searching = q.isNotBlank()
@@ -159,11 +161,25 @@ fun Sheet(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
     }
     val recent = remember(st.recent, keys) { st.recent.mapNotNull { keys[it] } }
     val groups = remember(visible) { GROUPS.map { g -> g to visible.filter { it.category in g.cats } }.filter { it.second.isNotEmpty() } }
+    // Your own tags (T1), each with its apps A–Z.
+    val tagged = remember(st.tags, keys) { st.tags.map { t -> t to t.apps.mapNotNull { keys[it] }.sortedBy { it.label.lowercase() } } }
     val calc = remember(q) { Search.calc(q) ?: Search.convert(q) }
     val settingsHits = remember(q) { Search.settings(q) }
     val contacts by androidx.compose.runtime.produceState(emptyList<Answer.Contact>(), q, ui.permissionTick) {
         val t = q.trim()
         value = if (t.length < 2) emptyList() else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Search.contacts(ctx, t) }
+    }
+    // Calendar events and files (files need All files access), looked up as you type.
+    val stamp = Glance.stamp
+    val events by androidx.compose.runtime.produceState(emptyList<Answer.Event>(), q, ui.permissionTick, stamp) {
+        val t = q.trim()
+        value = if (t.length < 2 || !st.searchCalendar || !Search.canReadCalendar(ctx)) emptyList()
+        else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Search.events(ctx, t) }
+    }
+    val files by androidx.compose.runtime.produceState(emptyList<Answer.File>(), q, stamp) {
+        val t = q.trim()
+        value = if (t.length < 2 || !st.searchFiles || !Search.canReadFiles()) emptyList()
+        else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Search.files(ctx, t) }
     }
     val byLetter = remember(visible) { visible.groupBy { letterOf(it.label) }.toSortedMap() }
     var scrubLetter by remember { mutableStateOf<Char?>(null) }
@@ -171,13 +187,17 @@ fun Sheet(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
     val density = LocalDensity.current
 
     val rail = if (searching) listOf(
-        RailItem("s-all", "apps"), RailItem("s-people", "person"), RailItem("s-settings", "settings"), RailItem("s-web", "travel_explore"),
-    ) else listOf(RailItem("most", "bolt"), RailItem("recent", "history"), RailItem("all", "sort_by_alpha")) +
+        RailItem("s-all", "apps"), RailItem("s-people", "person"), RailItem("s-calendar", "event"), RailItem("s-files", "description"),
+        RailItem("s-settings", "settings"), RailItem("s-web", "travel_explore"),
+    ) else listOf(RailItem("most", "bolt"), RailItem("recent", "history"), RailItem("all", "sort_by_alpha"), RailItem("sep-tags", "")) +
+        tagged.map { (t, _) -> RailItem("t-${t.id}", t.glyph) } + RailItem("t-new", "add") + RailItem("sep-groups", "") +
         groups.map { (g, _) -> RailItem(g.id, g.glyph) }
     val chosen = if (searching) kind else view
     val empty = if (!searching) emptySet() else buildSet {
         if (shown.isEmpty() && calc == null) add("s-all")
         if (contacts.isEmpty()) add("s-people")
+        if (events.isEmpty()) add("s-calendar")
+        if (files.isEmpty()) add("s-files")
         if (settingsHits.isEmpty()) add("s-settings")
     }
     val travel = ui.screenHpx * 0.5f
@@ -249,8 +269,13 @@ fun Sheet(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     rail.forEach { r ->
-                        RailButton(r.glyph, r.id == chosen, r.id in empty) {
-                            if (!searching) view = r.id
+                        if (r.id.startsWith("sep")) {
+                            Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
+                                Box(Modifier.size(22.dp, 1.dp).background(Color.White.copy(alpha = 0.18f)))
+                            }
+                        } else RailButton(r.glyph, r.id == chosen, r.id in empty) {
+                            if (r.id == "t-new") { val id = st.newTag(); view = "t-$id"; ui.editTag(id, fresh = true) }
+                            else if (!searching) view = r.id
                             else if (r.id == "s-web") { Actions.webSearch(ctx, q.trim()); ui.close() }
                             else kind = r.id
                         }
@@ -292,7 +317,18 @@ fun Sheet(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
                                     tiles("a$c", apps) { GlassTile(st, ui, it, iconSize, badged) }
                                 }
                             }
-                            else -> groups.firstOrNull { it.first.id == view }?.let { (g, apps) ->
+                            else -> tagged.firstOrNull { "t-${it.first.id}" == view }?.let { (t, apps) ->
+                                item(span = { GridItemSpan(maxLineSpan) }, key = "h-tag") {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Heading(t.name, if (apps.size == 1) "your tag · 1 app" else "your tag · ${apps.size} apps", Modifier.weight(1f))
+                                        PlainButton("Edit tag", glyph = "edit", height = 32.dp) { ui.editTag(t.id) }
+                                    }
+                                }
+                                if (apps.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }, key = "t-none") {
+                                    Lbl("Hold an app and choose Tags to put it here", Modifier.padding(4.dp), color = pal.sub)
+                                }
+                                tiles("t", apps) { GlassTile(st, ui, it, iconSize, badged) }
+                            } ?: groups.firstOrNull { it.first.id == view }?.let { (g, apps) ->
                                 heading(g.name, if (apps.size == 1) "1 app" else "${apps.size} apps")
                                 tiles("g", apps.sortedBy { it.label.lowercase() }) { GlassTile(st, ui, it, iconSize, badged) }
                             }
@@ -307,9 +343,12 @@ fun Sheet(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
                             item(span = { GridItemSpan(maxLineSpan) }, key = "rows") {
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     val people = kind == "s-all" || kind == "s-people"
+                                    val cal = kind == "s-all" || kind == "s-calendar"
+                                    val fil = kind == "s-all" || kind == "s-files"
                                     val sets = kind == "s-all" || kind == "s-settings"
                                     val nothing = (!apps || shown.isEmpty()) && calc == null &&
-                                        (!people || contacts.isEmpty()) && (!sets || settingsHits.isEmpty())
+                                        (!people || contacts.isEmpty()) && (!cal || events.isEmpty()) && (!fil || files.isEmpty()) &&
+                                        (!sets || settingsHits.isEmpty())
                                     if (nothing) Lbl("Nothing matches “${q.trim()}”", Modifier.fillMaxWidth().padding(12.dp), color = pal.sub, align = TextAlign.Center)
                                     if (people) {
                                         if (contacts.isNotEmpty()) {
@@ -320,6 +359,28 @@ fun Sheet(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
                                             }
                                         }
                                         Spacer(Modifier.height(4.dp))
+                                    }
+                                    if (cal) {
+                                        if (events.isNotEmpty()) {
+                                            events.forEachIndexed { i, e ->
+                                                ResultRow("event", e.title, e.note, i == 0, i == events.lastIndex) { Search.openEvent(ctx, e); ui.close() }
+                                            }
+                                            Spacer(Modifier.height(4.dp))
+                                        } else if (kind == "s-calendar" && st.searchCalendar && !Search.canReadCalendar(ctx)) {
+                                            ResultRow("event", "Search your calendar too", null, true, true) {
+                                                ui.askPermissions(arrayOf(android.Manifest.permission.READ_CALENDAR))
+                                            }
+                                        }
+                                    }
+                                    if (fil) {
+                                        if (files.isNotEmpty()) {
+                                            files.forEachIndexed { i, f ->
+                                                ResultRow(Search.fileGlyph(f.mime), f.name, f.note, i == 0, i == files.lastIndex) { Search.openFile(ctx, f); ui.close() }
+                                            }
+                                            Spacer(Modifier.height(4.dp))
+                                        } else if (kind == "s-files" && st.searchFiles && !Search.canReadFiles()) {
+                                            ResultRow("folder_open", "Search your files too", "Needs All files access", true, true) { Search.allowFiles(ctx) }
+                                        }
                                     }
                                     if (sets && settingsHits.isNotEmpty()) {
                                         settingsHits.forEachIndexed { i, h ->

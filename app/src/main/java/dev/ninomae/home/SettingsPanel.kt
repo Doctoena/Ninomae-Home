@@ -97,6 +97,8 @@ private val INDEX = listOf(
     Entry("gestures", "touch_app", "Double-tap to lock", "lock screen off"),
     Entry("search", "calculate", "Sums and conversions", "maths calculator units"),
     Entry("search", "person_search", "Contacts in search", "people call text"),
+    Entry("search", "event", "Calendar in search", "events appointments"),
+    Entry("search", "description", "Files in search", "documents pdf photos downloads"),
     Entry("search", "settings", "Android settings in search", "wifi battery"),
     Entry("glance", "event", "Next event", "calendar"),
     Entry("glance", "partly_cloudy_day", "Weather", "temperature location"),
@@ -289,6 +291,8 @@ private fun LookTile(st: HomeState, modifier: Modifier, onClick: () -> Unit) {
     }
     Box(modifier.glassPiece(RoundedCornerShape(22.dp)).pressScale(0.97f).clickable(onClick = onClick).padding(14.dp)) {
         Box(Modifier.align(Alignment.TopCenter)) { HomePreview(st, 84.dp) }
+        // The wallpaper changed outside Ninomae: pick it again for the glass.
+        if (st.glassStale) Dot(Modifier.align(Alignment.TopEnd))
         Column(Modifier.align(Alignment.BottomStart)) {
             Lbl("Look", size = 15.sp, weight = FontWeight.Medium)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -380,6 +384,18 @@ private fun PageBody(st: HomeState, ui: Ui, p: String) {
                     else GSwitch(st.searchContacts) { st.updateSearchContacts(!st.searchContacts) }
                 }
             },
+            {
+                Row3("event", "Calendar", if (Search.canReadCalendar(ctx)) "Your events, a month back to a year ahead" else "Needs permission to read your calendar") {
+                    if (st.searchCalendar && !Search.canReadCalendar(ctx)) GPill("Allow", accent = true) { ui.askPermissions(arrayOf(Manifest.permission.READ_CALENDAR)) }
+                    else GSwitch(st.searchCalendar) { st.updateSearchCalendar(!st.searchCalendar) }
+                }
+            },
+            {
+                Row3("description", "Files", if (Search.canReadFiles()) "Files on the phone, by name, newest first" else "Needs All files access") {
+                    if (st.searchFiles && !Search.canReadFiles()) GPill("Allow", accent = true) { Search.allowFiles(ctx) }
+                    else GSwitch(st.searchFiles) { st.updateSearchFiles(!st.searchFiles) }
+                }
+            },
             { Row3("settings", "Android settings", "Wi-Fi, battery, storage and more, by name") {} },
             { Row3("travel_explore", "The web and the Play Store", "At the end of every search") {} },
         )
@@ -440,7 +456,11 @@ private fun LookPage(st: HomeState, ui: Ui) {
                     Lbl("Wallpaper", size = 17.sp, weight = FontWeight.Medium)
                     Spacer(Modifier.height(4.dp))
                     Lbl(
-                        if (st.glass != null) "The drawer and settings frost it" else "Samsung won't share yours. Pick it here and the drawer and settings turn to frosted glass",
+                        when {
+                            st.glass != null -> "The drawer and settings frost it"
+                            st.glassStale -> "Your wallpaper changed outside Ninomae. Pick it here again to frost the glass"
+                            else -> "Samsung won't share yours. Pick it here and the drawer and settings turn to frosted glass"
+                        },
                         size = 12.sp, color = pal.sub, maxLines = 4,
                     )
                     Spacer(Modifier.height(12.dp))

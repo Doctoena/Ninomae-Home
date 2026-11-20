@@ -114,6 +114,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         st.refreshAccess()
+        st.checkWallpaper()
         applyStatusBar()
         Glance.refresh(this, st)
         Clock.start()

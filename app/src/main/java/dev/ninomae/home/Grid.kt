@@ -81,7 +81,21 @@ fun HomeGrid(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
         ui.screen = screen
         st.lastScreen = screen
     }
-    LaunchedEffect(pager.currentPage, off) { ui.page = pager.currentPage - off; ui.selected = null }
+    // Folding or unfolding: each screen goes back to the page it was on (its own layout); on the widgets page,
+    // which both screens share, you stay there.
+    val pageOn = remember { mutableMapOf<Int, Int>() }
+    var shownScreen by remember { mutableIntStateOf(screen) }
+    LaunchedEffect(screen) {
+        if (shownScreen == screen) return@LaunchedEffect
+        val onFeed = off == 1 && pager.currentPage == 0
+        shownScreen = screen
+        pager.scrollToPage((if (onFeed) 0 else pageOn[screen] ?: off).coerceIn(0, pages - 1))
+    }
+    LaunchedEffect(pager.currentPage, off) {
+        if (shownScreen == screen) pageOn[screen] = pager.currentPage
+        ui.page = pager.currentPage - off
+        ui.selected = null
+    }
     // Turning the widgets page on or off, or entering edit mode, keeps you on the same home page.
     var lastOff by remember { mutableIntStateOf(off) }
     LaunchedEffect(off) {
@@ -461,8 +475,8 @@ fun NinomaeWidget(st: HomeState, ui: Ui, kind: String) {
     when (kind) {
         "stack" -> Widgets(st, ui, Modifier.fillMaxWidth())
         "greeting" -> Greeting(st, all, Modifier.clickable { ui.toggle(Layer.Deck) })
-        "player" -> media?.let { PlayerCard(it, all) } ?: if (!ui.editing) Unit else Piece(Modifier.fillMaxWidth().height(98.dp), all) {
-            Row(Modifier.fillMaxSize().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        "player" -> media?.let { PlayerCard(it, all) } ?: if (!ui.editing) Unit else Box(Modifier.fillMaxWidth().height(92.dp).frosted(st, all, wash = 0.34f, edge = 0.2f)) {
+            Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Cover(null, 68.dp)
                 Spacer(Modifier.width(12.dp))
                 Column {
@@ -473,7 +487,7 @@ fun NinomaeWidget(st: HomeState, ui: Ui, kind: String) {
         }
         "jump" -> {
             val items = jumpItems(st)
-            if (items.isEmpty()) Piece(Modifier.fillMaxWidth().height(64.dp), all) {
+            if (items.isEmpty()) Box(Modifier.fillMaxWidth().height(64.dp).frosted(st, all, wash = 0.34f, edge = 0.2f)) {
                 Lbl("Apps you open show up here", Modifier.align(Alignment.Center), size = 13.sp, color = pal.sub)
             } else JumpBack(st, items, all)
         }
@@ -508,41 +522,52 @@ private fun WidgetStack(st: HomeState, ui: Ui, item: HomeItem, wDp: Float, hDp: 
     }
 }
 
-/** A folder big enough to show its apps: tap them straight from the home screen. */
+/** A folder big enough to show its apps (BF1): frosted like the small ones, names under the apps, tap them straight from home. */
 @Composable
 private fun BigFolder(st: HomeState, ui: Ui, item: HomeItem, badged: Set<String>, hold: (Offset) -> Unit) {
     val pal = LocalPal.current
     val ctx = LocalContext.current
-    Piece(Modifier.fillMaxSize(), RoundedCornerShape(Rad.normal + 3.dp), pal.l3.copy(alpha = 0.9f), edge = true) {
-        Column(Modifier.fillMaxSize().padding(10.dp)) {
+    Box(Modifier.fillMaxSize().frosted(st, RoundedCornerShape(26.dp), wash = 0.30f, edge = 0.22f)) {
+        Column(Modifier.fillMaxSize().padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 6.dp)) {
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(Rad.segment))
-                    .holdable(onTap = { if (!ui.editing) ui.openFolder(item.id) }, onHold = hold).padding(horizontal = 4.dp, vertical = 2.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                    .holdable(onTap = { if (!ui.editing) ui.openFolder(item.id) }, onHold = hold).padding(start = 10.dp, end = 2.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Title(item.name.ifBlank { "Folder" }, Modifier.weight(1f), size = 14.sp)
-                Glyph("open_in_full", size = 15.dp, color = pal.sub)
+                Title(item.name.ifBlank { "Folder" }, Modifier.weight(1f, fill = false), size = 18.sp)
+                Spacer(Modifier.width(8.dp))
+                Num("${item.apps.size}", size = 13.sp, color = pal.acc)
+                Spacer(Modifier.weight(1f))
+                Box(
+                    Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).background(Color.White.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) { Glyph("open_in_full", size = 15.dp) }
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             BoxWithConstraints(Modifier.fillMaxSize()) {
-                val cols = (maxWidth / 64.dp).toInt().coerceAtLeast(2)
-                val rows = (maxHeight / 72.dp).toInt().coerceAtLeast(1)
+                val cols = (maxWidth / 68.dp).toInt().coerceAtLeast(2)
+                val rows = (maxHeight / 92.dp).toInt().coerceAtLeast(1)
                 val shown = item.apps.take(cols * rows)
                 Column(verticalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxSize()) {
                     shown.chunked(cols).forEach { line ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        Row(Modifier.fillMaxWidth()) {
                             line.forEach { k ->
                                 val app = st.app(k)
-                                Box(
-                                    Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).pressScale()
-                                        .holdable(onTap = { if (!ui.editing && app != null) Actions.open(ctx, st, app) }, onHold = hold),
-                                    contentAlignment = Alignment.Center,
+                                Column(
+                                    Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).pressScale()
+                                        .holdable(onTap = { if (!ui.editing && app != null) Actions.open(ctx, st, app) }, onHold = hold)
+                                        .padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
                                 ) {
-                                    AppIcon(app, 48.dp)
-                                    if (st.dots && app?.pkg in badged) NoteBar()
+                                    Box {
+                                        if (app != null) GlassIcon(app, 52.dp) else AppIcon(null, 52.dp)
+                                        if (st.dots && app?.pkg in badged) NoteBar()
+                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                    Lbl(app?.label ?: "Missing", Modifier.padding(horizontal = 2.dp), size = 11.sp, align = TextAlign.Center)
                                 }
                             }
-                            repeat(cols - line.size) { Spacer(Modifier.size(56.dp)) }
+                            repeat(cols - line.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }

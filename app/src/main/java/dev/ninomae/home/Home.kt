@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
-import android.os.SystemClock
 import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -38,7 +37,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
@@ -61,6 +59,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -80,7 +82,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
-enum class Layer { None, Deck, Apps, Menu, PairMenu, PairMaker, Settings, Widgets, Folder, Rename }
+enum class Layer { None, Deck, Apps, Menu, PairMenu, PairMaker, Settings, Widgets, Folder, Rename, Tags, TagEdit }
 
 /** Which overlay is open, what's being held or dragged, and where the grid and dock sit. */
 class Ui {
@@ -160,7 +162,7 @@ class Ui {
 
     /** What a hold menu was opened over (the drawer or a folder), so it can close back to it. */
     var menuParent by mutableStateOf(Layer.None)
-    private val menuOpen get() = layer == Layer.Menu || layer == Layer.PairMenu
+    private val menuOpen get() = layer == Layer.Menu || layer == Layer.PairMenu || layer == Layer.Tags || layer == Layer.TagEdit
     /** The drawer is up: on its own, or under a menu opened from it. */
     val inApps get() = layer == Layer.Apps || (menuOpen && menuParent == Layer.Apps)
     /** A folder is open: on its own, or under a menu opened from it. */
@@ -221,6 +223,29 @@ class Ui {
     fun openFolder(id: String) {
         folderId = id
         layer = Layer.Folder
+    }
+
+    /** The app whose tags are being picked, and the tag being edited. */
+    var tagApp by mutableStateOf<String?>(null)
+    var tagId by mutableStateOf<String?>(null)
+
+    /** Pick [key]'s drawer tags; over the drawer if that's where it was held. */
+    fun pickTags(key: String) {
+        tagApp = key
+        openCount++
+        layer = Layer.Tags
+    }
+
+    /** The tag being edited was just made: Cancel throws it away. */
+    var tagFresh by mutableStateOf(false)
+
+    /** Edit a drawer tag, over the drawer. */
+    fun editTag(id: String, fresh: Boolean = false) {
+        tagId = id
+        tagFresh = fresh
+        openCount++
+        if (layer == Layer.Apps) menuParent = Layer.Apps
+        layer = Layer.TagEdit
     }
 
     fun rename(key: String) {
@@ -344,12 +369,39 @@ fun Home(st: HomeState, ui: Ui) {
 
         // ---------- panels ----------
         Box(insets) {
-            Centered(ui.layer == Layer.PairMaker) {
-                PairMaker(st, ui, compact, Modifier.width(minOf(screenW - 16.dp, 560.dp)).heightIn(max = screenH - 120.dp))
+            Centered(ui.layer == Layer.Tags) {
+                TagsPanel(st, ui, Modifier.width(minOf(screenW - 16.dp, 400.dp)))
             }
-            Centered(ui.layer == Layer.Rename) {
-                RenamePanel(st, ui, Modifier.width(minOf(screenW - 16.dp, 380.dp)))
+            Centered(ui.layer == Layer.TagEdit) {
+                TagEditPanel(st, ui, Modifier.width(minOf(screenW - 16.dp, 400.dp)))
             }
+        }
+
+        // ---------- pair maker: full screen, on the same glass ----------
+        val pairP by animateFloatAsState(if (ui.layer == Layer.PairMaker) 1f else 0f, spring(1f, 380f), label = "pair")
+        if (pairP > 0.001f) PairMaker(st, ui, compact, { pairP }, Modifier.fillMaxSize())
+
+        // ---------- rename: one glass piece sitting on the keyboard (R1a) ----------
+        Box(
+            Modifier.fillMaxSize()
+                .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
+                .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)),
+        ) {
+            AnimatedVisibility(
+                ui.layer == Layer.Rename,
+                Modifier.align(Alignment.BottomCenter).padding(8.dp),
+                enter = fadeIn() + androidx.compose.animation.slideInVertically { it / 3 },
+                exit = fadeOut() + androidx.compose.animation.slideOutVertically { it / 3 },
+            ) { RenamePanel(st, ui, Modifier.width(minOf(screenW - 16.dp, 480.dp))) }
+        }
+
+        // ---------- the wallpaper changed elsewhere: a one-time note above the dock (G1b) ----------
+        if (st.glassNote && ui.layer == Layer.None && !ui.editing && ui.drag == null) {
+            GlassNote(
+                st, ui,
+                Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(bottom = 92.dp).width(minOf(screenW - 32.dp, 440.dp)),
+            )
         }
 
         // ---------- an open folder: glass grown out of its icon ----------
@@ -366,7 +418,7 @@ fun Home(st: HomeState, ui: Ui) {
 
         // ---------- dragging ----------
         if (ui.drag != null) {
-            RemoveZone(ui, Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars).padding(top = if (ownBar) 40.dp else 4.dp))
+            RemoveZone(st, ui, Modifier.align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.statusBars).padding(top = if (ownBar) 40.dp else 4.dp))
             Ghost(st, ui)
         }
     }
@@ -482,21 +534,8 @@ private fun PickedCard(st: HomeState, ui: Ui, item: HomeItem) {
     val pal = LocalPal.current
     val ctx = LocalContext.current
     val app = if (item.type == "app") st.app(item.app) else null
-    val name = when (item.type) {
-        "app" -> app?.label ?: "App"
-        "folder" -> item.name.ifBlank { "Folder" }
-        "shortcut" -> item.name
-        "nwidget" -> ninomaeWidgets.firstOrNull { it.first == item.kind }?.second ?: "Widget"
-        "stack" -> "Widget stack"
-        else -> AppWidgets.info(item.widgetId)?.loadLabel(ctx.packageManager) ?: "Widget"
-    }
-    val glyph = when (item.type) {
-        "folder" -> "folder"
-        "shortcut" -> "shortcut"
-        "stack" -> "layers"
-        "nwidget" -> when (item.kind) { "clock" -> "schedule"; "calendar" -> "calendar_month"; "player" -> "music_note"; "greeting" -> "waving_hand"; "jump" -> "history"; else -> "widgets" }
-        else -> "widgets"
-    }
+    val name = itemName(st, ctx, item)
+    val glyph = itemGlyph(item)
     val about = if (item.resizable) "${item.w} × ${item.h} · drag the edges to resize" else "Hold to move it"
     Column(
         Modifier.width(380.dp).frosted(st, RoundedCornerShape(26.dp), wash = 0.4f, edge = 0.2f).padding(12.dp),
@@ -545,58 +584,129 @@ private fun PickedCard(st: HomeState, ui: Ui, item: HomeItem) {
     }
 }
 
+/** What a home item is called, for its card in edit mode and while it's dragged. */
+fun itemName(st: HomeState, ctx: android.content.Context, item: HomeItem): String = when (item.type) {
+    "app" -> st.app(item.app)?.label ?: "App"
+    "folder" -> item.name.ifBlank { "Folder" }
+    "shortcut" -> item.name
+    "nwidget" -> ninomaeWidgets.firstOrNull { it.first == item.kind }?.second ?: "Widget"
+    "stack" -> "Widget stack"
+    else -> AppWidgets.info(item.widgetId)?.loadLabel(ctx.packageManager) ?: "Widget"
+}
+
+fun itemGlyph(item: HomeItem): String = when (item.type) {
+    "folder" -> "folder"
+    "shortcut" -> "shortcut"
+    "stack" -> "layers"
+    "nwidget" -> when (item.kind) { "clock" -> "schedule"; "calendar" -> "calendar_month"; "player" -> "music_note"; "greeting" -> "waving_hand"; "jump" -> "history"; else -> "widgets" }
+    else -> "widgets"
+}
+
+private val RemoveRed = Color(0xFF96302A)
+
+/** D1: a red-tinted glass pill at the top while dragging, with a line saying what letting go there does. */
 @Composable
-private fun RemoveZone(ui: Ui, modifier: Modifier) {
-    val pal = LocalPal.current
+private fun RemoveZone(st: HomeState, ui: Ui, modifier: Modifier) {
     val src = ui.drag?.src ?: return
-    val text = when {
-        src.item != null -> "Remove"
-        src.folderId != null -> "Take out of folder"
-        src.fromDock -> "Unpin"
+    val (text, hint) = when {
+        src.item != null -> "Remove" to "Let go to take it off home"
+        src.folderId != null -> "Take out" to "Let go to take it out of the folder"
+        src.fromDock -> "Unpin" to "Let go to take it off the dock"
         else -> return
     }
     val over = overRemoveZone(ui)
-    Piece(
-        modifier.padding(top = 8.dp).height(40.dp),
-        RoundedCornerShape(Rad.container),
-        if (over) pal.acc else pal.l4,
-        edge = true,
-    ) {
-        Row(Modifier.fillMaxHeight().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Glyph(if (src.item != null) "delete" else "remove_circle", size = 19.dp, color = if (over) pal.ink else pal.fg)
+    val k by animateFloatAsState(if (over) 1.08f else 1f, spring(0.6f, 600f), label = "remove")
+    val shape = RoundedCornerShape(22.dp)
+    Column(modifier.padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(
+            Modifier.graphicsLayer { scaleX = k; scaleY = k }.height(44.dp)
+                .then(if (over) Modifier.clip(shape).background(Color(0xFFB8463E)) else Modifier.frosted(st, shape, wash = 0.3f, edge = 0.18f).background(RemoveRed.copy(alpha = 0.55f)))
+                .padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Glyph(if (src.item != null) "delete" else "remove_circle", size = 20.dp, color = Color(0xFFFFDAD5))
             Spacer(Modifier.width(8.dp))
-            Lbl(text, color = if (over) pal.ink else pal.fg, weight = FontWeight.SemiBold)
+            Lbl(text, size = 15.sp, color = Color(0xFFFFE6E2), weight = FontWeight.SemiBold)
         }
+        Spacer(Modifier.height(6.dp))
+        androidx.compose.foundation.text.BasicText(
+            hint,
+            style = androidx.compose.ui.text.TextStyle(
+                color = Color.White, fontSize = 12.sp, fontFamily = Sans,
+                shadow = androidx.compose.ui.graphics.Shadow(Color.Black.copy(alpha = 0.7f), Offset(0f, 1.5f), 6f),
+            ),
+        )
     }
 }
 
-/** What's under the finger while dragging. */
+/** What's under the finger while dragging: an app's icon, or (D1) a widget lifted as glass with its name and size. */
 @Composable
 private fun Ghost(st: HomeState, ui: Ui) {
     val pal = LocalPal.current
     val density = LocalDensity.current
+    val ctx = LocalContext.current
     val src = ui.drag?.src ?: return
     val item = src.item
     val span = item?.takeIf { it.resizable }
-    val big = span != null
-    val wDp = if (span != null) (ui.cellWdp * span.w).dp else 60.dp
-    val hDp = if (span != null) (ui.cellHdp * span.h).dp else 60.dp
+    // A big widget follows the finger at most a little wider than a phone row, so it doesn't cover the grid.
+    val wDp = if (span != null) minOf(ui.cellWdp * span.w, 340f).dp else 60.dp
+    val hDp = if (span != null) minOf(ui.cellHdp * span.h, 118f).coerceAtLeast(84f).dp else 60.dp
     val wPx = with(density) { wDp.toPx() }
     val hPx = with(density) { hDp.toPx() }
+    val shape = RoundedCornerShape(24.dp)
     Box(
         Modifier
             .offset { IntOffset((ui.dragPos.x - wPx / 2).roundToInt(), (ui.dragPos.y - hPx / 2).roundToInt()) }
             .size(wDp, hDp)
-            .scale(1.08f),
+            .scale(1.04f),
         contentAlignment = Alignment.Center,
     ) {
         when {
-            big -> Piece(Modifier.fillMaxSize(), RoundedCornerShape(Rad.normal), pal.l3.copy(alpha = 0.85f), edge = true) {
-                Glyph("open_with", Modifier.align(Alignment.Center), size = 28.dp, color = pal.acc)
+            span != null -> Row(
+                Modifier.fillMaxSize().shadow(18.dp, shape).frosted(st, shape, wash = 0.32f, edge = 0.35f)
+                    .background(pal.acc.copy(alpha = 0.10f)).padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.fillMaxHeight().aspectRatio(1f).clip(RoundedCornerShape(18.dp)).background(pal.acc.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center,
+                ) { Glyph(itemGlyph(span), size = 28.dp, color = pal.acc) }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Title(itemName(st, ctx, span), size = 18.sp)
+                    Num("${span.w} × ${span.h}", size = 13.sp, color = pal.sub)
+                }
             }
             item?.type == "folder" -> FolderIcon(st, item, 58.dp)
             item?.type == "shortcut" -> AppIcon(st.byPkg[item.pkg], 58.dp)
             else -> AppIcon(st.app(src.appKey ?: item?.app), 58.dp)
+        }
+    }
+}
+
+/** G1b: the wallpaper was changed in another app, so the glass went plain. Once, above the dock. */
+@Composable
+private fun GlassNote(st: HomeState, ui: Ui, modifier: Modifier) {
+    val pal = LocalPal.current
+    Row(
+        modifier.height(64.dp).frosted(st, RoundedCornerShape(24.dp), wash = 0.5f, edge = 0.2f).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(pal.acc), contentAlignment = Alignment.Center) {
+            Glyph("wallpaper", size = 22.dp, color = pal.ink)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Title("New wallpaper", size = 15.sp)
+            Lbl("Pick it here to frost the glass", size = 12.sp, color = pal.sub)
+        }
+        Box(
+            Modifier.height(36.dp).clip(RoundedCornerShape(14.dp)).background(pal.acc).clickable { st.dismissGlassNote(); ui.pickWallpaper() }
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.Center,
+        ) { Lbl("Pick", size = 13.sp, color = pal.ink, weight = FontWeight.SemiBold) }
+        Box(Modifier.size(36.dp).clip(CircleShape).clickable { st.dismissGlassNote() }, contentAlignment = Alignment.Center) {
+            Glyph("close", size = 20.dp, color = pal.sub)
         }
     }
 }
@@ -655,11 +765,6 @@ fun greeting(now: LocalDateTime, name: String): String {
         else -> "Good evening"
     }
     return if (name.isBlank()) part else "$part, $name"
-}
-
-fun uptime(): String {
-    val m = SystemClock.elapsedRealtime() / 60_000
-    return if (m < 60) "up ${m}m" else if (m < 60 * 48) "up ${m / 60}h" else "up ${m / 1440}d"
 }
 
 fun ago(t: Long): String {

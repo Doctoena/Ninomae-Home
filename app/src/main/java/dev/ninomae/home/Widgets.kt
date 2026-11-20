@@ -1,5 +1,6 @@
 package dev.ninomae.home
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,7 +32,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.format.DateTimeFormatter
 
-/** Desktop stack: greeting, player, jump back in, joined like the shell's sidebar. */
+/**
+ * The Ninomae stack (W1a): one joined card on frosted glass. A greeting with the date and a weather
+ * chip, the player in solid rose (like the widgets page), then your pairs and recent apps in a row.
+ */
 @Composable
 fun Widgets(st: HomeState, ui: Ui, modifier: Modifier) {
     val media by Media.now.collectAsState()
@@ -46,85 +50,67 @@ fun Widgets(st: HomeState, ui: Ui, modifier: Modifier) {
     }
 }
 
-@Composable
-fun Avatar(st: HomeState, size: Dp) {
-    val pal = LocalPal.current
-    Box(Modifier.size(size).clip(CircleShape).background(pal.sec), contentAlignment = Alignment.Center) {
-        val initial = st.name.trim().firstOrNull()?.uppercase()
-        if (initial != null) Title(initial, size = (size.value * 0.42f).sp, color = pal.acc)
-        else Glyph("person", size = size * 0.55f, color = pal.acc, fill = true)
-    }
-}
-
+/** Good morning (and your name), the full date, and the weather as a chip on the right. No battery. */
 @Composable
 fun Greeting(st: HomeState, shape: Shape, modifier: Modifier = Modifier) {
     val pal = LocalPal.current
     val now = rememberNow()
-    Piece(modifier.fillMaxWidth().height(74.dp), shape) {
-        Row(Modifier.fillMaxHeight().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Avatar(st, 44.dp)
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Title(greeting(now, st.name), size = 19.sp)
-                Lbl(
-                    listOfNotNull(
-                        now.format(DateTimeFormatter.ofPattern("EEE d MMM")),
-                        Glance.weather?.let { "${it.temp} ${it.text}" },
-                        Glance.event?.let { "${it.title} ${it.whenText}" } ?: "${Status.battery}%",
-                    ).joinToString("  ·  "),
-                    size = 13.sp,
-                    color = pal.sub,
-                )
+    Row(
+        Modifier.fillMaxWidth().height(64.dp).frosted(st, shape, wash = 0.34f, edge = 0.2f).then(modifier).padding(start = 18.dp, end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Title(greeting(now, st.name), size = 21.sp)
+            Lbl(now.format(DateTimeFormatter.ofPattern("EEEE d MMMM")), size = 12.5.sp, color = pal.sub)
+        }
+        Glance.weather?.let { w ->
+            Row(
+                Modifier.height(36.dp).clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = 0.10f)).padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Glyph(w.glyph, size = 18.dp, color = pal.acc, fill = true)
+                Spacer(Modifier.width(6.dp))
+                Num(w.temp, size = 15.sp)
             }
         }
     }
 }
 
+/** The player in solid rose: cover, title and artist, a thin progress line, next and pause. */
 @Composable
 fun PlayerCard(m: MediaNow, shape: Shape) {
     val pal = LocalPal.current
-    // Read only by the time text and the bar's drawing, so the card itself doesn't redraw every second.
+    // Read only by the line's drawing, so the card itself doesn't redraw every second.
     val pos = rememberPosition(m)
-    val tint = m.tint?.let { mix(pal.l3, it, 0.24f) } ?: pal.l3
-    Piece(Modifier.fillMaxWidth().height(98.dp), shape, tint) {
-        Row(Modifier.fillMaxHeight().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Cover(m.art, 68.dp)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Title(m.title, size = 17.sp)
-                Lbl(listOf(m.artist, m.app).filter { it.isNotBlank() }.joinToString("  ·  "), size = 12.sp, color = pal.sub)
-                Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton("skip_previous", 30.dp, pal.fg) { Media.prev() }
-                    Box(
-                        Modifier.size(32.dp).clip(RoundedCornerShape(Rad.segment)).background(pal.acc).clickable { Media.toggle() },
-                        contentAlignment = Alignment.Center,
-                    ) { Glyph(if (m.playing) "pause" else "play_arrow", size = 20.dp, color = pal.ink, fill = true) }
-                    IconButton("skip_next", 30.dp, pal.fg) { Media.next() }
-                    Spacer(Modifier.weight(1f))
-                    if (m.duration > 0) PositionText(pos, m.duration)
-                }
+    Row(
+        Modifier.fillMaxWidth().height(92.dp).clip(shape).background(pal.acc).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Cover(m.art, 68.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Title(m.title, size = 17.sp, color = pal.ink)
+            Lbl(m.artist.ifBlank { m.app }, size = 12.5.sp, color = pal.ink.copy(alpha = 0.8f))
+            if (m.duration > 0) {
+                Spacer(Modifier.height(10.dp))
+                Box(
+                    Modifier.fillMaxWidth(0.85f).height(4.dp).clip(RoundedCornerShape(2.dp)).background(pal.ink.copy(alpha = 0.2f))
+                        .drawBehind {
+                            val w = size.width * (pos.value.toFloat() / m.duration).coerceIn(0f, 1f)
+                            drawRect(pal.ink.copy(alpha = 0.8f), size = androidx.compose.ui.geometry.Size(w, size.height))
+                        },
+                )
             }
         }
-        if (m.duration > 0) {
-            Box(
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(horizontal = 17.dp)
-                    .fillMaxWidth()
-                    .height(3.dp)
-                    .drawBehind {
-                        val w = size.width * (pos.value.toFloat() / m.duration).coerceIn(0f, 1f)
-                        drawRoundRect(pal.acc, size = androidx.compose.ui.geometry.Size(w, size.height), cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height / 2))
-                    },
-            )
-        }
+        Spacer(Modifier.width(8.dp))
+        Glyph("skip_next", Modifier.clip(RoundedCornerShape(12.dp)).clickable { Media.next() }.padding(6.dp), size = 24.dp, color = pal.ink, fill = true)
+        Spacer(Modifier.width(4.dp))
+        Box(
+            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(pal.ink).clickable { Media.toggle() },
+            contentAlignment = Alignment.Center,
+        ) { Glyph(if (m.playing) "pause" else "play_arrow", size = 22.dp, color = pal.acc, fill = true) }
     }
 }
-
-@Composable
-private fun PositionText(pos: androidx.compose.runtime.State<Long>, duration: Long) =
-    Num("${mmss(pos.value)} / ${mmss(duration)}", size = 11.sp, color = LocalPal.current.sub)
 
 sealed interface Jump {
     data class P(val pair: AppPair) : Jump
@@ -134,37 +120,34 @@ sealed interface Jump {
 @Composable
 fun jumpItems(st: HomeState): List<Jump> {
     val pairs = st.pairs.sortedByDescending { it.id == st.activePair }.take(2).map { Jump.P(it) }
-    val apps = st.recent.mapNotNull { st.app(it) }.take(4 - pairs.size).map { Jump.A(it) }
+    val apps = st.recent.mapNotNull { st.app(it) }.filter { it.key !in st.hidden }.take(5 - pairs.size).map { Jump.A(it) }
     return pairs + apps
 }
 
+/** Your pairs and recent apps, five in a row on glass, evenly spaced. */
 @Composable
 fun JumpBack(st: HomeState, items: List<Jump>, shape: Shape) {
     val pal = LocalPal.current
     val ctx = LocalContext.current
-    Piece(Modifier.fillMaxWidth(), shape) {
-        Column(Modifier.padding(14.dp)) {
-            Title("Jump back in", size = 14.sp)
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                items.forEach { item ->
-                    val (label, click) = when (item) {
-                        is Jump.P -> item.pair.name to { Actions.openPair(ctx, st, item.pair) }
-                        is Jump.A -> item.app.label to { Actions.open(ctx, st, item.app) }
-                    }
-                    Column(
-                        Modifier.width(58.dp).clip(RoundedCornerShape(Rad.container)).clickable { click() }.padding(vertical = 2.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        when (item) {
-                            is Jump.P -> PairIcon(st.app(item.pair.left), st.app(item.pair.right), 48.dp)
-                            is Jump.A -> AppIcon(item.app, 48.dp)
-                        }
-                        Spacer(Modifier.height(5.dp))
-                        Lbl(label, size = 12.sp, color = pal.sub, align = TextAlign.Center)
-                    }
+    Row(Modifier.fillMaxWidth().height(84.dp).frosted(st, shape, wash = 0.34f, edge = 0.2f).padding(horizontal = 6.dp)) {
+        items.forEach { item ->
+            val (label, click) = when (item) {
+                is Jump.P -> item.pair.name to { Actions.openPair(ctx, st, item.pair) }
+                is Jump.A -> item.app.label to { Actions.open(ctx, st, item.app) }
+            }
+            Column(
+                Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(Rad.container)).pressScale().clickable { click() },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                when (item) {
+                    is Jump.P -> PairIcon(st.app(item.pair.left), st.app(item.pair.right), 48.dp)
+                    is Jump.A -> GlassIcon(item.app, 48.dp)
                 }
+                Spacer(Modifier.height(5.dp))
+                Lbl(label, Modifier.padding(horizontal = 2.dp), size = 11.5.sp, color = pal.sub, align = TextAlign.Center)
             }
         }
+        repeat(5 - items.size) { Spacer(Modifier.weight(1f)) }
     }
 }

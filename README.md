@@ -16,6 +16,8 @@ It also has **foldable support**. On a foldable like the Galaxy Z Fold, the cove
 
 Samsung turns off Android's window blur, and Android won't let apps read your wallpaper. So you set the wallpaper from Ninomae (**Settings → Look → Wallpaper**). It keeps a frosted copy for the glass, a small preview, and the wallpaper's main colour for the theme. The drawer, settings, folders, dock, clock and menus are then all frosted from it, lined up with where the wallpaper really is.
 
+If you change the wallpaper in another app, Ninomae notices: the glass goes plain (it would show the old picture), and a note above the dock asks you to pick the new one here.
+
 ## The app drawer
 
 <p align="center">
@@ -24,15 +26,16 @@ Samsung turns off Android's window blur, and Android won't let apps read your wa
 </p>
 
 - Swipe up from anywhere. Search is at the top and **focused as it opens**, so you can type straight away. Enter opens the top match.
-- A slim rail on the left: **Most used**, **Recent**, **A–Z** (with a letter scrubber), then groups made from the categories apps give Android (Social, Media, Games, Maps, Work…).
-- While you type, the rail picks what to show: apps, people, settings, or the web.
+- A slim rail on the left: **Most used**, **Recent**, **A–Z** (with a letter scrubber), your own **tags** (hold an app → Tags, or **＋** in the rail), then groups made from the categories apps give Android (Social, Media, Games, Maps, Work…).
+- While you type, the rail picks what to show: apps, people, calendar events, files (with All files access), settings, or the web.
 - Search answers questions too: sums (`12*7`, `15% of 80`), conversions (`5 km to mi`), contacts (call or text), and Android settings pages by name.
 - Swipe down on the list to close it. It follows your finger.
 
 ## Folders and the hold menu
 
 - A **folder** opens as a pane of frosted glass grown from its icon, four apps to a page. Tap the name to rename it, **＋** to tick apps in or out, and **↗** to see them all at once.
-- **Hold an app** for its own shortcuts, then Split screen, Pop-up window, Make a pair, Pin, Rename, Hide, App info and Uninstall. From the dock the menu joins onto it. In the drawer or a folder, it opens without closing them.
+- **Hold an app** for its own shortcuts, then Split screen, Pop-up window, Make a pair, Pin, Rename, Hide, App info and Uninstall. From the dock the menu joins onto it. In the drawer or a folder, it opens without closing them. Rename sits on the keyboard, with the app's own name one tap away.
+- **Uninstalling** an app takes it off everywhere: home, folders, the dock, pairs and tags.
 - **Notifications** show as a small rose bar under the app's icon, the same everywhere.
 
 ## Edit mode and widgets
@@ -68,7 +71,7 @@ On a tablet-sized screen, like a foldable's inner screen, the layout becomes a d
 
 
 - A **bar** in place of the status bar: app pairs on the left, the player in the middle, status and the clock on the right.
-- **App pairs**: two apps opened side by side in split screen, named, one tap from the bar.
+- **App pairs**: two apps opened side by side in split screen, named, one tap from the bar. Made on a full-screen page: tap a side, pick its app, Save.
 - A **control deck** pulled down from the top: toggles, flashlight, screenshot, lock, the player with volume and brightness, and notifications.
 
 ## Build
