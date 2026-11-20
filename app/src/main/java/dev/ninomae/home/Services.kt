@@ -10,6 +10,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaController
+import android.media.session.MediaSession
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Build
@@ -189,8 +190,9 @@ object Media {
     private var current: MediaController? = null
     private var appCtx: Context? = null
 
-    private val sessionsListener = MediaSessionManager.OnActiveSessionsChangedListener { pick(it) }
+    private val sessionsListener = MediaSessionManager.OnActiveSessionsChangedListener { watch(it) }
 
+    /** What the shown session does (its song and play state). */
     private val callback = object : MediaController.Callback() {
         override fun onMetadataChanged(metadata: MediaMetadata?) = update()
         override fun onPlaybackStateChanged(state: PlaybackState?) = update()
@@ -200,6 +202,14 @@ object Media {
         }
     }
 
+    /**
+     * Every other session is watched too: when another app starts playing, the player switches to it.
+     * (Android only reports changes to the list of sessions, not which one is playing, so without this
+     * it stayed on the app that paused.)
+     */
+    private val others = HashMap<MediaSession.Token, Pair<MediaController, MediaController.Callback>>()
+    private var sessions: List<MediaController> = emptyList()
+
     fun attach(ctx: Context) {
         appCtx = ctx.applicationContext
         val m = ctx.getSystemService(MediaSessionManager::class.java)
@@ -207,20 +217,42 @@ object Media {
         val cn = ComponentName(ctx, NotifService::class.java)
         runCatching {
             m.addOnActiveSessionsChangedListener(sessionsListener, cn)
-            pick(m.getActiveSessions(cn))
+            watch(m.getActiveSessions(cn))
         }
     }
 
     fun detach() {
         runCatching { msm?.removeOnActiveSessionsChangedListener(sessionsListener) }
+        watch(emptyList())
         current?.unregisterCallback(callback)
         current = null
         now.value = null
     }
 
-    private fun pick(list: List<MediaController>?) {
-        val c = list.orEmpty().firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
-            ?: list.orEmpty().firstOrNull()
+    private fun watch(list: List<MediaController>?) {
+        sessions = list.orEmpty()
+        val tokens = sessions.map { it.sessionToken }.toSet()
+        // Stop watching the ones that are gone, start on the new ones.
+        others.keys.filter { it !in tokens }.forEach { t -> others.remove(t)?.let { (c, cb) -> runCatching { c.unregisterCallback(cb) } } }
+        sessions.forEach { c ->
+            if (c.sessionToken !in others) {
+                val cb = object : MediaController.Callback() {
+                    override fun onPlaybackStateChanged(state: PlaybackState?) {
+                        if (state?.state == PlaybackState.STATE_PLAYING && c.sessionToken != current?.sessionToken) pick()
+                    }
+                }
+                runCatching { c.registerCallback(cb) }
+                others[c.sessionToken] = c to cb
+            }
+        }
+        pick()
+    }
+
+    /** Whichever is playing; if none is, stay on the one shown (if it's still there), else the first. */
+    private fun pick() {
+        val c = sessions.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+            ?: sessions.firstOrNull { it.sessionToken == current?.sessionToken }
+            ?: sessions.firstOrNull()
         if (c?.sessionToken != current?.sessionToken) {
             current?.unregisterCallback(callback)
             current = c

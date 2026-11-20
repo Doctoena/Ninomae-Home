@@ -264,7 +264,7 @@ class HomeState private constructor(private val ctx: Context) {
         if (!callbackSet) {
             callbackSet = true
             launcherApps.registerCallback(object : LauncherApps.Callback() {
-                override fun onPackageRemoved(packageName: String?, user: UserHandle?) = load()
+                override fun onPackageRemoved(packageName: String?, user: UserHandle?) { widgetCheck = true; load() }
                 override fun onPackageAdded(packageName: String?, user: UserHandle?) = load()
                 override fun onPackageChanged(packageName: String?, user: UserHandle?) = load()
                 override fun onPackagesAvailable(p: Array<out String>?, u: UserHandle?, r: Boolean) = load()
@@ -291,6 +291,7 @@ class HomeState private constructor(private val ctx: Context) {
             android.util.Log.i("Ninomae", "apps: ${list.size} in ${android.os.SystemClock.elapsedRealtime() - t0} ms, ${IconCache.drawn.get() - drawnBefore} icons drawn, the rest cached")
             withContext(Dispatchers.IO) { IconCache.prune(ctx, list.map { it.key }.toSet()) }
             forgetRemoved()
+            if (widgetCheck) { widgetCheck = false; forgetDeadWidgets() }
             firstRunDefaults()
             homeDefaults()
         }
@@ -422,6 +423,48 @@ class HomeState private constructor(private val ctx: Context) {
         if (activePair != null && keptPairs.none { it.id == activePair }) setActive(null)
         pairs = keptPairs; savePairs()
         saveTags(tags.map { it.copy(apps = fixAll(it.apps)) })
+    }
+
+    /** Look for widgets whose app is gone: once at start, then after each uninstall. */
+    private var widgetCheck = true
+
+    /**
+     * Uninstalling an app unbinds its widgets, which then only say "Widget unavailable". Those go:
+     * from the home screens, from stacks (a stack left with one turns back into that widget), and
+     * from the widgets page.
+     */
+    private fun forgetDeadWidgets() {
+        // Before the widget host is set up every widget would look gone: try again on the next load.
+        if (!AppWidgets.ready) { widgetCheck = true; return }
+        fun dead(id: Int) = id != 0 && AppWidgets.info(id) == null
+        fun deadPart(p: String) = p.startsWith("w:") && dead(p.drop(2).toIntOrNull() ?: 0)
+        val gone = mutableListOf<Int>()
+        val kept = home.mapNotNull { item ->
+            when (item.type) {
+                "widget" -> if (dead(item.widgetId)) { gone += item.widgetId; null } else item
+                "stack" -> {
+                    item.apps.filter(::deadPart).forEach { gone += it.drop(2).toInt() }
+                    val left = item.apps.filterNot(::deadPart)
+                    when {
+                        left.size == item.apps.size -> item
+                        left.isEmpty() -> null
+                        left.size == 1 -> left.first().let { p ->
+                            if (p.startsWith("w:")) item.copy(type = "widget", widgetId = p.drop(2).toInt(), apps = emptyList())
+                            else item.copy(type = "nwidget", kind = p.drop(2), apps = emptyList())
+                        }
+                        else -> item.copy(apps = left)
+                    }
+                }
+                else -> item
+            }
+        }
+        val feedKept = feed.filterNot { it.type == "widget" && dead(it.widgetId).also { d -> if (d) gone += it.widgetId } }
+        if (gone.isEmpty()) return
+        android.util.Log.i("Ninomae", "forgetting widgets of uninstalled apps: $gone")
+        gone.forEach { AppWidgets.delete(it) }
+        commit(kept)
+        feed = feedKept.mapIndexed { i, it -> it.copy(y = i) }
+        saveFeed()
     }
 
     private fun firstRunDefaults() {

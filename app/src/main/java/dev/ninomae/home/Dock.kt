@@ -32,13 +32,21 @@ import androidx.compose.ui.unit.sp
  * hairline, then a rose all-apps squircle (no sheen line on top: the user didn't like it). An app with notifications gets a small rose bar under it.
  * Holding an app joins its menu onto the dock; it also takes drops.
  */
+/** How many pinned apps the dock shows on each screen (the cover is a phone, the inner screen a desktop). */
+fun dockRoom(screen: Int) = if (screen == 1) 4 else 9
+
+/** The dock on [screen] has no room for another pin. */
+fun HomeState.dockFull(screen: Int) = pinned.count { app(it) != null } >= dockRoom(screen)
+
+const val DOCK_FULL = "The dock is full. Unpin an app to make room"
+
 @Composable
 fun Dock(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
     val pal = LocalPal.current
     val density = LocalDensity.current
     val notes by NotifService.notes.collectAsState()
     val badged = remember(notes) { notes.map { it.pkg }.toSet() }
-    val pinned = st.pinned.mapNotNull { st.app(it) }.let { if (compact) it.take(4) else it.take(9) }
+    val pinned = st.pinned.mapNotNull { st.app(it) }.take(dockRoom(if (compact) 1 else 0))
     val recents = if (st.dockRecentsOn) st.dockRecents(if (compact) 0 else 3) else emptyList()
     val menuOnDock = ui.layer == Layer.Menu && ui.menuFromDock
     val dropping = ui.drag != null && ui.dockRect.contains(ui.dragPos)

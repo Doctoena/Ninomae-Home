@@ -118,6 +118,8 @@ private fun performDrop(st: HomeState, ui: Ui) {
 
     // On the dock: pin it where it was dropped.
     if (ui.dockRect.contains(p) && key != null) {
+        // A new pin on a full dock: say so, and leave the app where it was.
+        if (key !in st.pinned && st.dockFull(screen)) { ui.note(DOCK_FULL); return }
         val slot = ((p.x - ui.pinRect.left - ui.dockPadPx) / ui.dockSlotPx).roundToInt()
         st.pinAt(key, slot)
         src.item?.let { st.removeItem(it.id) }

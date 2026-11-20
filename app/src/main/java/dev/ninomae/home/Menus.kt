@@ -70,7 +70,10 @@ fun AppMenu(st: HomeState, ui: Ui, compact: Boolean) {
         place ?: MenuAction("info", "App info") { Actions.info(ctx, app); ui.close() },
     )
     val right = listOf(
-        MenuAction(if (pinned) "keep_off" else "keep", if (pinned) "Unpin" else "Pin to dock") { st.togglePin(app.key); ui.back() },
+        MenuAction(if (pinned) "keep_off" else "keep", if (pinned) "Unpin" else "Pin to dock") {
+            if (!pinned && st.dockFull(ui.screen)) ui.note(DOCK_FULL) else st.togglePin(app.key)
+            ui.back()
+        },
         MenuAction("edit", "Rename") { ui.rename(app.key) },
         MenuAction("sell", "Tags") { ui.pickTags(app.key) },
         MenuAction("visibility_off", "Hide") { st.setHidden(app.key, true); ui.back() },

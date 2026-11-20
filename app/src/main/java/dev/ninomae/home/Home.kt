@@ -108,6 +108,15 @@ class Ui {
     var pickWallpaper: () -> Unit = {}
     var restore: () -> Unit = {}
 
+    /** A short note above the dock ("The dock is full"), cleared after a moment. */
+    var dockNote by mutableStateOf<String?>(null)
+        private set
+    private var noteStamp by mutableIntStateOf(0)
+    /** Show [text] above the dock; showing it again starts its timer over. */
+    fun note(text: String) { dockNote = text; noteStamp++ }
+    val noteKey get() = noteStamp
+    fun clearNote() { dockNote = null }
+
     /** The edge sidebar: where its top sits (root px) and the icon under the finger (-1 for none). */
     var edgeTop by mutableFloatStateOf(0f)
     var edgeSel by mutableIntStateOf(-1)
@@ -413,6 +422,20 @@ fun Home(st: HomeState, ui: Ui) {
                 Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.navigationBars)
                     .padding(bottom = 92.dp).width(minOf(screenW - 32.dp, 440.dp)),
             )
+        }
+
+        // ---------- a short note above the dock ----------
+        ui.dockNote?.let { note ->
+            LaunchedEffect(ui.noteKey) { kotlinx.coroutines.delay(2600); ui.clearNote() }
+            Row(
+                Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.navigationBars).padding(bottom = 92.dp)
+                    .height(46.dp).frosted(st, RoundedCornerShape(23.dp), wash = 0.55f, edge = 0.2f).padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Glyph("keep", size = 18.dp, color = LocalPal.current.acc)
+                Spacer(Modifier.width(10.dp))
+                Lbl(note, size = 13.5.sp)
+            }
         }
 
         // ---------- an open folder: glass grown out of its icon ----------

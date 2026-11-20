@@ -192,13 +192,6 @@ fun HomeState.reflow() {
     commit(home)
 }
 
-fun HomeState.resize(id: String, dw: Int, dh: Int) {
-    val it = home.firstOrNull { i -> i.id == id } ?: return
-    val w = (it.w + dw).coerceIn(1, gridCols(it.screen))
-    val h = (it.h + dh).coerceIn(1, gridRows(it.screen))
-    if (fits(it.screen, it.page, it.x, it.y, w, h, ignore = id)) commit(home.map { i -> if (i.id == id) i.copy(w = w, h = h) else i })
-}
-
 /** Move an item's edges: [dx]/[dy] shift its corner, [dw]/[dh] change its size. Only if it still fits. */
 fun HomeState.reshape(id: String, dx: Int, dy: Int, dw: Int, dh: Int) {
     val it = home.firstOrNull { i -> i.id == id } ?: return

@@ -78,7 +78,7 @@ If you change the wallpaper in another app, Ninomae notices: the glass goes plai
 - A **folder** opens as a pane of frosted glass grown from its icon, four apps to a page. Tap the name to rename it, **＋** to tick apps in or out, and **↗** to see them all at once.
 - **Hold an app** for its own shortcuts, then Split screen, Pop-up window, Make a pair, Add to edge, Pin, Rename, Tags, Hide and Uninstall. From the dock the menu joins onto it. In the drawer or a folder, it opens without closing them.
 - **Rename** sits on the keyboard, with the app's own name one tap away.
-- **Uninstalling** an app takes it off everywhere: home, folders, the dock, the edge, pairs and tags.
+- **Uninstalling** an app takes it off everywhere: home, folders, the dock, the edge, pairs and tags, and its widgets go too.
 - **Notifications** show as a small rose bar under the app's icon, the same everywhere.
 
 ## App pairs

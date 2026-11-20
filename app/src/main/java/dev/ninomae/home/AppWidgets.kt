@@ -91,6 +91,9 @@ object AppWidgets {
 
     fun info(id: Int): AppWidgetProviderInfo? = mgr?.getAppWidgetInfo(id)
 
+    /** Set up (by the activity) and able to answer whether a widget still exists. */
+    val ready get() = mgr != null
+
     fun providers(): List<AppWidgetProviderInfo> = mgr?.installedProviders.orEmpty()
 
     /** Cells a widget wants, from its own target size or its minimum size. */
