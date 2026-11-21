@@ -70,7 +70,7 @@ fun GlassBackdrop(st: HomeState, progress: () -> Float) {
     }
     Box(
         Modifier.fillMaxSize().graphicsLayer { alpha = progress().coerceIn(0f, 1f) }
-            .background(pal.l0.copy(alpha = if (frosted != null) (0.34f * st.glassTint).coerceIn(0f, 0.95f) else 0.84f)),
+            .background(pal.l0.copy(alpha = if (frosted != null) (0.46f * st.glassTint).coerceIn(0f, 0.95f) else 0.84f)),
     )
 }
 
@@ -93,16 +93,19 @@ fun GlassBadge(glyph: String, size: Dp = 38.dp) {
     }
 }
 
-/** An app's icon on glass: themed icons get a frosted tile (no sheen line: the user didn't like it), others draw as they are. */
+/** An app's icon on glass: themed (and coloured) icons get a frosted tile (no sheen line: the user didn't like it), others draw as they are. */
 @Composable
 fun GlassIcon(app: AppEntry, size: Dp) {
     val pal = LocalPal.current
-    if (LocalThemedIcons.current && app.mono != null) {
+    if (LocalIconStyle.current >= 1 && app.mono != null) {
         val shape = iconShape(size)
+        val c = themedColour(app)
+        // Coloured icons get a faint wash of their own colour on the glass too.
+        val wash = if (c != pal.acc) c.copy(alpha = 0.14f) else Color.Transparent
         Box(
-            Modifier.size(size).clip(shape).background(glass(0.12f)).border(1.dp, Color.White.copy(alpha = 0.16f), shape),
+            Modifier.size(size).clip(shape).background(glass(0.12f)).background(wash).border(1.dp, Color.White.copy(alpha = 0.20f), shape),
             contentAlignment = Alignment.Center,
-        ) { Image(app.mono, app.label, Modifier.size(size * 0.86f), colorFilter = ColorFilter.tint(pal.acc)) }
+        ) { Image(app.mono, app.label, Modifier.size(size * 0.86f), colorFilter = ColorFilter.tint(c)) }
     } else AppIcon(app, size)
 }
 

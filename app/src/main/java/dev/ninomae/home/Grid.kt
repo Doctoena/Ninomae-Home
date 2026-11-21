@@ -29,6 +29,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -96,10 +97,20 @@ fun HomeGrid(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
         ui.selected = null
     }
     // Turning the widgets page on or off, or entering edit mode, keeps you on the same home page.
-    var lastOff by remember { mutableIntStateOf(off) }
-    LaunchedEffect(off) {
-        if (off != lastOff) { pager.scrollToPage((pager.currentPage + off - lastOff).coerceAtLeast(0)); lastOff = off }
+    // Done in the same frame (requestScrollToPage, from a SideEffect), so the pager never shows the shifted page.
+    val lastOff = remember { intArrayOf(off) }
+    SideEffect {
+        if (off != lastOff[0]) {
+            pager.requestScrollToPage((pager.currentPage + off - lastOff[0]).coerceIn(0, pages - 1))
+            lastOff[0] = off
+        }
     }
+    // Edit mode's dots and outlines fade in and out rather than popping.
+    // Written straight into ui.editFade (read only in graphicsLayer), so the grid doesn't recompose every frame.
+    LaunchedEffect(ui.editing) {
+        androidx.compose.animation.core.animate(ui.editFade, if (ui.editing) 1f else 0f, animationSpec = androidx.compose.animation.core.tween(220)) { v, _ -> ui.editFade = v }
+    }
+    val dotsShown by remember { derivedStateOf { ui.editFade > 0.01f } }
     LaunchedEffect(ui.editing) { if (!ui.editing) ui.selected = null }
     // The wallpaper stays centred on every page (the user doesn't want it spanning across pages).
     val view = androidx.compose.ui.platform.LocalView.current
@@ -151,7 +162,7 @@ fun HomeGrid(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
                 if (pagerPage < off) { FeedPage(st, ui, compact); return@HorizontalPager }
                 val page = pagerPage - off
                 Box(Modifier.fillMaxSize().desktopGestures(st, ui)) {
-                    if (ui.editing) EditDots(cols, rows, cw, ch)
+                    if (dotsShown) Box(Modifier.fillMaxSize().graphicsLayer { alpha = ui.editFade }) { EditDots(cols, rows, cw, ch) }
                     st.home.filter { it.screen == screen && it.page == page }.forEach { item ->
                         key(item.id) { ItemView(st, ui, item, cw, ch, badged) }
                     }
@@ -280,7 +291,7 @@ private fun ItemView(st: HomeState, ui: Ui, item: HomeItem, cw: Dp, ch: Dp, badg
             "nwidget" -> NinomaeWidget(st, ui, item.kind)
             "stack" -> WidgetStack(st, ui, item, cw.value * item.w - 8, ch.value * item.h - 8)
         }
-        if (ui.editing) EditLayer(st, ui, item, cw, ch, hold)
+        if (ui.editing) Box(Modifier.fillMaxSize().graphicsLayer { alpha = ui.editFade }) { EditLayer(st, ui, item, cw, ch, hold) }
     }
 }
 
@@ -464,8 +475,9 @@ private fun PageDots(count: Int, current: Int) {
 
 // ---------- Ninomae widgets ----------
 
+/** One of Ninomae's own widgets. [preview] is the widget picker's copy: it always shows something, even with nothing playing. */
 @Composable
-fun NinomaeWidget(st: HomeState, ui: Ui, kind: String) {
+fun NinomaeWidget(st: HomeState, ui: Ui, kind: String, preview: Boolean = false) {
     val pal = LocalPal.current
     val ctx = LocalContext.current
     val media by Media.now.collectAsState()
@@ -473,7 +485,7 @@ fun NinomaeWidget(st: HomeState, ui: Ui, kind: String) {
     when (kind) {
         "stack" -> Widgets(st, ui, Modifier.fillMaxWidth())
         "greeting" -> Greeting(st, all, Modifier.clickable { ui.toggle(Layer.Deck) })
-        "player" -> media?.let { PlayerCard(it, all) } ?: if (!ui.editing) Unit else Box(Modifier.fillMaxWidth().height(92.dp).frosted(st, all, wash = 0.34f, edge = 0.2f)) {
+        "player" -> media?.let { PlayerCard(it, all) } ?: if (!ui.editing && !preview) Unit else Box(Modifier.fillMaxWidth().height(92.dp).frosted(st, all, wash = 0.34f, edge = 0.2f)) {
             Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Cover(null, 68.dp)
                 Spacer(Modifier.width(12.dp))
@@ -640,7 +652,7 @@ private fun ClockSlab(st: HomeState) {
                     Lbl(l.text, Modifier.weight(1f, fill = false), size = 12.sp)
                     if (l.note.isNotEmpty()) {
                         Spacer(Modifier.width(5.dp))
-                        Lbl(l.note, size = 11.sp, color = pal.sub)
+                        Lbl(l.note, size = 12.sp, color = pal.sub)
                     }
                 }
             }

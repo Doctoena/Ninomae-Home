@@ -2,6 +2,7 @@ package dev.ninomae.home
 
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
 import android.text.format.DateFormat
@@ -88,6 +89,8 @@ enum class Layer { None, Deck, Apps, Menu, PairMenu, PairMaker, Settings, Widget
 class Ui {
     var layer by mutableStateOf(Layer.None)
     var editing by mutableStateOf(false)
+    /** 0..1 as edit mode fades in; read only in graphicsLayer. */
+    var editFade by mutableFloatStateOf(0f)
     /** The home item picked in edit mode: it gets handles, and the bottom bar becomes its card. */
     var selected by mutableStateOf<String?>(null)
     /** The widget picker was opened from the widgets page: what's picked goes there. */
@@ -339,7 +342,18 @@ fun Home(st: HomeState, ui: Ui) {
             else Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars).padding(bottom = 4.dp))
             HomeGrid(st, ui, compact, Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp))
             Box(Modifier.fillMaxWidth().padding(bottom = 12.dp, top = 8.dp), contentAlignment = Alignment.Center) {
-                if (ui.editing) EditBar(st, ui) else Dock(st, ui, compact, Modifier)
+                // Crossfade between the dock and edit mode's bar, both kept centred (Crossfade's own box pinned them left).
+                androidx.compose.animation.AnimatedContent(
+                    ui.editing,
+                    transitionSpec = {
+                        androidx.compose.animation.fadeIn(tween(220)) togetherWith androidx.compose.animation.fadeOut(tween(160)) using
+                            androidx.compose.animation.SizeTransform(clip = false)
+                    },
+                    contentAlignment = Alignment.Center,
+                    label = "editBar",
+                ) { editing ->
+                    if (editing) EditBar(st, ui) else Dock(st, ui, compact, Modifier)
+                }
             }
         }
 
@@ -516,7 +530,7 @@ private fun BoxScope.Centered(visible: Boolean, content: @Composable () -> Unit)
 @Composable
 private fun EditBar(st: HomeState, ui: Ui) {
     val item = ui.selected?.let { id -> st.home.firstOrNull { it.id == id } }
-    Box(Modifier.fillMaxWidth().height(66.dp), contentAlignment = Alignment.BottomCenter) {
+    Box(Modifier.fillMaxWidth().height(DOCK_H), contentAlignment = Alignment.BottomCenter) {
         Box(Modifier.wrapContentHeight(Alignment.Bottom, unbounded = true)) {
             androidx.compose.animation.AnimatedContent(
                 item?.id,
@@ -568,7 +582,7 @@ private fun EditTool(glyph: String, label: String, onClick: () -> Unit) {
     ) {
         Glyph(glyph, size = 22.dp)
         Spacer(Modifier.height(3.dp))
-        Lbl(label, size = 11.sp)
+        Lbl(label, size = 12.sp)
     }
 }
 
@@ -592,7 +606,7 @@ private fun PickedCard(st: HomeState, ui: Ui, item: HomeItem) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Lbl(name, size = 15.sp, weight = FontWeight.Medium)
-                Lbl(about, size = 11.sp, color = pal.sub)
+                Lbl(about, size = 12.sp, color = pal.sub)
             }
             Box(
                 Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(pal.acc).clickable { ui.selected = null },

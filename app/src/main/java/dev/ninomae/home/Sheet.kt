@@ -79,6 +79,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -248,7 +249,7 @@ fun Sheet(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
                         keyboardActions = KeyboardActions(onGo = { shown.firstOrNull()?.let { open(it) } }),
                         decorationBox = { inner ->
                             Box(contentAlignment = Alignment.CenterStart) {
-                                if (q.isEmpty()) Lbl("Search apps, people, settings", size = 16.sp, color = pal.dim)
+                                if (q.isEmpty()) Lbl("Search apps, people, settings", size = 16.sp, color = pal.sub)
                                 inner()
                             }
                         },
@@ -264,8 +265,8 @@ fun Sheet(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
                 Column(
                     Modifier.width(if (compact) 54.dp else 58.dp).verticalScroll(rememberScrollState())
                         .padding(bottom = 12.dp)
-                        .clip(RoundedCornerShape(29.dp)).background(glass(0.08f))
-                        .border(1.dp, glassEdge(), RoundedCornerShape(29.dp)).padding(6.dp),
+                        .clip(RoundedCornerShape(29.dp)).background(glass(0.10f))
+                        .border(1.dp, Color.White.copy(alpha = 0.20f), RoundedCornerShape(29.dp)).padding(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     rail.forEach { r ->
@@ -290,11 +291,11 @@ fun Sheet(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
                         GridCells.Fixed(cols),
                         state = grid,
                         contentPadding = PaddingValues(end = if (scrubbing) 34.dp else 12.dp, bottom = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
                         if (!searching) when (view) {
                             "most" -> {
-                                heading("Most used", "most opened")
+                                heading("Most used", count = most.size)
                                 tiles("m", most) { GlassTile(st, ui, it, iconSize, badged) }
                                 item(span = { GridItemSpan(maxLineSpan) }, key = "pairs-h") {
                                     Heading("Pairs", "open side by side", Modifier.padding(top = 10.dp))
@@ -309,7 +310,7 @@ fun Sheet(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
                                 tiles("r", recent) { GlassTile(st, ui, it, iconSize, badged) }
                             }
                             "all" -> {
-                                heading("All apps", "${visible.size} apps")
+                                heading("All apps", count = visible.size)
                                 byLetter.forEach { (c, apps) ->
                                     item(span = { GridItemSpan(maxLineSpan) }, key = "l$c") {
                                         Title(c.toString(), Modifier.padding(start = 4.dp, top = 4.dp), size = 18.sp, color = pal.acc)
@@ -329,7 +330,7 @@ fun Sheet(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
                                 }
                                 tiles("t", apps) { GlassTile(st, ui, it, iconSize, badged) }
                             } ?: groups.firstOrNull { it.first.id == view }?.let { (g, apps) ->
-                                heading(g.name, if (apps.size == 1) "1 app" else "${apps.size} apps")
+                                heading(g.name, count = apps.size)
                                 tiles("g", apps.sortedBy { it.label.lowercase() }) { GlassTile(st, ui, it, iconSize, badged) }
                             }
                         } else {
@@ -429,8 +430,8 @@ fun Sheet(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
     }
 }
 
-private fun LazyGridScope.heading(title: String, note: String) {
-    item(span = { GridItemSpan(maxLineSpan) }, key = "h-$title") { Heading(title, note) }
+private fun LazyGridScope.heading(title: String, note: String = "", count: Int? = null) {
+    item(span = { GridItemSpan(maxLineSpan) }, key = "h-$title") { Heading(title, note, count = count) }
 }
 
 private fun LazyGridScope.tiles(prefix: String, apps: List<AppEntry>, tile: @Composable (AppEntry) -> Unit) {
@@ -438,12 +439,17 @@ private fun LazyGridScope.tiles(prefix: String, apps: List<AppEntry>, tile: @Com
 }
 
 @Composable
-private fun Heading(title: String, note: String, modifier: Modifier = Modifier) {
+private fun Heading(title: String, note: String, modifier: Modifier = Modifier, count: Int? = null) {
     val pal = LocalPal.current
-    Row(modifier.padding(start = 4.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.Bottom) {
+    Row(modifier.padding(start = 4.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Title(title, size = 22.sp)
         Spacer(Modifier.width(10.dp))
-        Lbl(note, Modifier.padding(bottom = 3.dp), size = 13.sp, color = pal.dim)
+        // A count in a small chip, or a short note in the brighter secondary colour.
+        if (count != null) Box(
+            Modifier.height(22.dp).widthIn(min = 28.dp).clip(RoundedCornerShape(11.dp)).background(glass(0.12f)).padding(horizontal = 8.dp),
+            contentAlignment = Alignment.Center,
+        ) { Lbl("$count", size = 12.sp, color = pal.acc, weight = FontWeight.SemiBold) }
+        else if (note.isNotEmpty()) Lbl(note, Modifier.padding(top = 3.dp), size = 13.5.sp, color = pal.sub)
     }
 }
 
@@ -457,7 +463,7 @@ private fun RailButton(glyph: String, on: Boolean, empty: Boolean, onClick: () -
             .clip(CircleShape).background(if (on) pal.acc else Color.Transparent)
             .pressScale().clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Glyph(glyph, size = 22.dp, color = if (on) pal.ink else pal.sub.copy(alpha = if (empty) 0.35f else 1f), fill = on) }
+    ) { Glyph(glyph, size = 22.dp, color = if (on) pal.ink else pal.fg.copy(alpha = if (empty) 0.3f else 0.9f), fill = on) }
 }
 
 /** Icon and name. Hold for the menu, then drag it out to the home screen. */
@@ -486,7 +492,7 @@ private fun GlassTile(st: HomeState, ui: Ui, app: AppEntry, size: Dp, badged: Se
             if (st.dots && app.pkg in badged) NoteBar()
         }
         Spacer(Modifier.height(10.dp))
-        Lbl(app.label, Modifier.padding(horizontal = 2.dp), size = 12.sp, align = TextAlign.Center)
+        Lbl(app.label, Modifier.padding(horizontal = 2.dp), size = 12.5.sp, weight = FontWeight.Medium, align = TextAlign.Center)
     }
 }
 
@@ -636,7 +642,7 @@ private fun ResultRow(glyph: String, text: String, note: String?, first: Boolean
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Lbl(text, size = 15.sp)
-            note?.let { Lbl(it, size = 11.sp, color = pal.dim) }
+            note?.let { Lbl(it, size = 12.sp, color = pal.sub) }
         }
         Glyph("north_east", size = 18.dp, color = pal.dim)
     }
@@ -735,7 +741,7 @@ private fun ContactRow(c: Answer.Contact, first: Boolean, last: Boolean, onDone:
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Lbl(c.name, size = 15.sp, weight = FontWeight.SemiBold)
-            c.number?.let { Lbl(it, size = 11.sp, color = pal.dim) }
+            c.number?.let { Lbl(it, size = 12.sp, color = pal.sub) }
         }
         if (c.number != null) {
             IconButton("chat", 38.dp, pal.fg) { Search.text(ctx, c); onDone() }

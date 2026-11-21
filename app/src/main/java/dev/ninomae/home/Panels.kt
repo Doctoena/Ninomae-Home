@@ -196,7 +196,7 @@ private fun FolderCaption(st: HomeState, folder: HomeItem, adding: Boolean, onAd
             textStyle = caption,
             cursorBrush = SolidColor(pal.acc),
             visualTransformation = Upper,
-            decorationBox = { inner -> Box { if (name.isEmpty()) Lbl("FOLDER", size = 11.sp, color = pal.dim, weight = FontWeight.Bold); inner() } },
+            decorationBox = { inner -> Box { if (name.isEmpty()) Lbl("FOLDER", size = 11.sp, color = pal.sub, weight = FontWeight.Bold); inner() } },
         )
         Lbl("  ·  ${folder.apps.size}", size = 11.sp, color = pal.acc, weight = FontWeight.Bold)
         Spacer(Modifier.weight(1f))
@@ -332,7 +332,7 @@ fun RenamePanel(st: HomeState, ui: Ui, modifier: Modifier) {
                 Spacer(Modifier.width(5.dp))
                 Lbl(app.original, Modifier.widthIn(max = 150.dp), size = 12.sp)
                 Spacer(Modifier.width(5.dp))
-                Lbl("its own", size = 10.sp, color = pal.dim)
+                Lbl("its own", size = 11.sp, color = pal.sub)
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -352,7 +352,7 @@ fun RenamePanel(st: HomeState, ui: Ui, modifier: Modifier) {
                     cursorBrush = SolidColor(pal.acc),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { save() }),
-                    decorationBox = { inner -> Box { if (text.text.isEmpty()) Lbl(app.original, size = 17.sp, color = pal.dim); inner() } },
+                    decorationBox = { inner -> Box { if (text.text.isEmpty()) Lbl(app.original, size = 17.sp, color = pal.sub); inner() } },
                 )
             }
             Spacer(Modifier.width(8.dp))

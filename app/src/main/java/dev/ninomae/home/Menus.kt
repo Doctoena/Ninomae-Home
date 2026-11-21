@@ -93,7 +93,7 @@ fun AppMenu(st: HomeState, ui: Ui, compact: Boolean) {
                 Title(app.label, size = 17.sp)
                 Lbl(
                     when { opened == 0 -> "Hold and drag to move it"; opened == 1 -> "Opened once"; else -> "Opened $opened times" },
-                    size = 11.sp, color = pal.sub,
+                    size = 12.sp, color = pal.sub,
                 )
             }
             Box(

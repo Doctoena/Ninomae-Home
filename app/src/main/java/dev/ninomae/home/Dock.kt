@@ -60,7 +60,7 @@ fun Dock(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
     }
     Row(
         modifier
-            .height(70.dp)
+            .height(DOCK_H)
             .onGloballyPositioned { ui.dockRect = it.boundsInRoot(); ui.pinRect = it.boundsInRoot() }
             .frosted(st, shape, wash = if (dropping) 0.12f else 0.26f, edge = 0.2f)
             .padding(horizontal = 14.dp),

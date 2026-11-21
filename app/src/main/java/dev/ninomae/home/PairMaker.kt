@@ -135,7 +135,7 @@ fun PairMaker(st: HomeState, ui: Ui, compact: Boolean, progress: () -> Float, mo
                         name, { name = it.take(18) }, Modifier.weight(1f), singleLine = true,
                         textStyle = TextStyle(color = pal.fg, fontSize = 14.sp, fontFamily = Sans),
                         cursorBrush = SolidColor(pal.acc),
-                        decorationBox = { inner -> Box { if (name.isEmpty()) Lbl(autoName(a, b) ?: "Name it", size = 14.sp, color = pal.dim); inner() } },
+                        decorationBox = { inner -> Box { if (name.isEmpty()) Lbl(autoName(a, b) ?: "Name it", size = 14.sp, color = pal.sub); inner() } },
                     )
                 }
                 Row(
@@ -153,7 +153,7 @@ fun PairMaker(st: HomeState, ui: Ui, compact: Boolean, progress: () -> Float, mo
             Row(Modifier.padding(start = 4.dp, bottom = 10.dp), verticalAlignment = Alignment.Bottom) {
                 Title(if (slot == 0) "Left side" else "Right side", size = 18.sp)
                 Spacer(Modifier.width(10.dp))
-                Lbl("most used first", Modifier.padding(bottom = 2.dp), size = 12.sp, color = pal.dim)
+                Lbl("most used first", Modifier.padding(bottom = 2.dp), size = 13.sp, color = pal.sub)
             }
             LazyVerticalGrid(
                 GridCells.Fixed(if (compact) 4 else 6),
@@ -194,7 +194,7 @@ fun PairMaker(st: HomeState, ui: Ui, compact: Boolean, progress: () -> Float, mo
                     q, { q = it }, Modifier.weight(1f), singleLine = true,
                     textStyle = TextStyle(color = pal.fg, fontSize = 15.sp, fontFamily = Sans),
                     cursorBrush = SolidColor(pal.acc),
-                    decorationBox = { inner -> Box { if (q.isEmpty()) Lbl("Find an app", size = 15.sp, color = pal.dim); inner() } },
+                    decorationBox = { inner -> Box { if (q.isEmpty()) Lbl("Find an app", size = 15.sp, color = pal.sub); inner() } },
                 )
                 if (q.isNotEmpty()) GlassButton("close", 34.dp) { q = "" }
                 Spacer(Modifier.width(6.dp))

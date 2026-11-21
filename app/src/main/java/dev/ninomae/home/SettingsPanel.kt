@@ -1,5 +1,8 @@
 package dev.ninomae.home
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.FilterQuality
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.mutableFloatStateOf
@@ -200,7 +203,7 @@ private fun SearchField(q: String, onChange: (String) -> Unit) {
             q, onChange, Modifier.weight(1f), singleLine = true,
             textStyle = TextStyle(color = pal.fg, fontSize = 16.sp, fontFamily = Sans),
             cursorBrush = SolidColor(pal.acc),
-            decorationBox = { inner -> Box(contentAlignment = Alignment.CenterStart) { if (q.isEmpty()) Lbl("Search settings", size = 15.sp, color = pal.dim); inner() } },
+            decorationBox = { inner -> Box(contentAlignment = Alignment.CenterStart) { if (q.isEmpty()) Lbl("Search settings", size = 15.sp, color = pal.sub); inner() } },
         )
         if (q.isNotEmpty()) GlassButton("close") { onChange("") }
     }
@@ -271,7 +274,7 @@ private fun Bento(st: HomeState, compact: Boolean, open: (String) -> Unit) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         GlassBadge(c.second, 32.dp)
                         Spacer(Modifier.height(6.dp))
-                        Lbl(c.third, size = 12.sp)
+                        Lbl(c.third, size = 12.5.sp, weight = FontWeight.Medium)
                     }
                     if (flag) Dot(Modifier.align(Alignment.TopEnd).padding(10.dp))
                 }
@@ -310,14 +313,15 @@ private fun WideTile(glyph: String, name: String, state: String, shape: Shape, o
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Lbl(name, size = 15.sp, weight = FontWeight.Medium)
-            Lbl(state, size = 11.sp, color = pal.sub)
+            Lbl(state, size = 12.sp, color = pal.sub)
         }
-        Glyph("north_east", size = 16.dp, color = pal.dim)
+        Glyph("north_east", size = 16.dp, color = pal.sub)
     }
 }
 
+/** Settings' glass: a touch more solid than the backdrop, with a crisp edge, so tiles and rows read as raised. */
 private fun Modifier.glassPiece(shape: Shape): Modifier = composed {
-    clip(shape).background(glass(0.07f)).border(1.dp, glassEdge(), shape)
+    clip(shape).background(glass(0.09f)).border(1.dp, glass(0.17f), shape)
 }
 
 /** A bento tile: something live at the top, then its name and what it's set to. */
@@ -326,10 +330,10 @@ private fun Tile(modifier: Modifier, name: String, state: String, onClick: () ->
     val pal = LocalPal.current
     Box(modifier.glassPiece(RoundedCornerShape(22.dp)).pressScale(0.97f).clickable(onClick = onClick).padding(14.dp)) {
         Box(Modifier.align(Alignment.TopStart), content = top)
-        Glyph("north_east", Modifier.align(Alignment.TopEnd), size = 16.dp, color = pal.dim)
+        Glyph("north_east", Modifier.align(Alignment.TopEnd), size = 16.dp, color = pal.sub)
         Column(Modifier.align(Alignment.BottomStart)) {
-            Lbl(name, size = 14.sp, weight = FontWeight.Medium)
-            Lbl(state, size = 11.sp, color = pal.sub)
+            Lbl(name, size = 15.sp, weight = FontWeight.Medium)
+            Lbl(state, size = 12.sp, color = pal.sub)
         }
     }
 }
@@ -351,7 +355,7 @@ private fun LookTile(st: HomeState, modifier: Modifier, onClick: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(9.dp).clip(CircleShape).background(pal.acc))
                 Spacer(Modifier.width(5.dp))
-                Lbl(source + if (st.iconStyle == 1) " · themed" else "", size = 11.sp, color = pal.sub)
+                Lbl(source + when (st.iconStyle) { 1 -> " · themed"; 2 -> " · coloured"; else -> "" }, size = 12.sp, color = pal.sub)
             }
         }
     }
@@ -403,7 +407,7 @@ private fun GlanceTile(st: HomeState, modifier: Modifier, onClick: () -> Unit) {
             ev != null -> Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(4.dp, 30.dp).clip(RoundedCornerShape(2.dp)).background(pal.acc))
                 Spacer(Modifier.width(8.dp))
-                Column { Lbl(ev.title, Modifier.width(110.dp), size = 13.sp); Lbl(ev.whenText, size = 11.sp, color = pal.sub) }
+                Column { Lbl(ev.title, Modifier.width(110.dp), size = 13.sp); Lbl(ev.whenText, size = 12.sp, color = pal.sub) }
             }
             w != null -> Row(verticalAlignment = Alignment.CenterVertically) {
                 Glyph(w.glyph, size = 22.dp, color = pal.acc)
@@ -501,28 +505,10 @@ private fun LookPage(st: HomeState, ui: Ui) {
     val packs = remember { Icons.packs(ctx) }
     val choices = listOf<IconPack?>(null) + packs
     val shared = remember(st.colourSource) { wallpaperSeed(ctx) != null }
+    // L1: your home in miniature on top, drawn with the choices below, so every pick shows straight away.
+    LookPreview(st)
+    Spacer(Modifier.height(8.dp))
     Rows(
-        // The wallpaper, as its own card.
-        {
-            Row(Modifier.fillMaxWidth().glassPiece(LocalRowShape.current).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                HomePreview(st, 84.dp)
-                Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f)) {
-                    Lbl("Wallpaper", size = 17.sp, weight = FontWeight.Medium)
-                    Spacer(Modifier.height(4.dp))
-                    Lbl(
-                        when {
-                            st.glass != null -> "The drawer and settings frost it"
-                            st.glassStale -> "Your wallpaper changed outside Ninomae. Pick it here again to frost the glass"
-                            else -> "Samsung won't share yours. Pick it here and the drawer and settings turn to frosted glass"
-                        },
-                        size = 12.sp, color = pal.sub, maxLines = 4,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    GPill(if (st.glass != null) "Change" else "Pick", glyph = "image", accent = true) { ui.pickWallpaper() }
-                }
-            }
-        },
         // Colours: where they come from, and the swatches.
         {
             Column(Modifier.fillMaxWidth().glassPiece(LocalRowShape.current).padding(14.dp)) {
@@ -538,7 +524,7 @@ private fun LookPage(st: HomeState, ui: Ui) {
                                 st.colourSource == 1 -> "Pick your wallpaper above to take its colours. Until then, your swatch"
                                 else -> "Your swatch, whatever the wallpaper"
                             },
-                            size = 11.sp, color = pal.sub, maxLines = 3,
+                            size = 12.sp, color = pal.sub, maxLines = 3,
                         )
                     }
                 }
@@ -557,56 +543,13 @@ private fun LookPage(st: HomeState, ui: Ui) {
                 }
             }
         },
-        // App icons: two cards to pick from, showing your dock both ways.
+        // App icons: the style and the shape, both shown in the preview above.
         {
             Column(Modifier.fillMaxWidth().glassPiece(LocalRowShape.current).padding(12.dp)) {
                 Lbl("App icons", Modifier.padding(start = 2.dp, bottom = 10.dp), size = 15.sp, weight = FontWeight.Medium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("Original" to 0, "Themed" to 1).forEach { (name, v) ->
-                        val on = st.iconStyle == v
-                        Column(
-                            Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
-                                .background(if (on) pal.acc.copy(alpha = 0.18f) else glass(0.07f))
-                                .border(if (on) 2.dp else 1.dp, if (on) pal.acc else glassEdge(), RoundedCornerShape(16.dp))
-                                .clickable { st.updateIcons(v, st.iconPack) }.padding(vertical = 14.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            CompositionLocalProvider(LocalThemedIcons provides (v == 1)) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    st.pinned.take(3).mapNotNull { st.app(it) }.forEach { GlassIcon(it, 30.dp) }
-                                }
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            Lbl(name, size = 13.sp, color = if (on) pal.acc else pal.fg, weight = FontWeight.Medium)
-                        }
-                    }
-                }
-            }
-        },
-        // Icon shape: four cards, each showing your dock in that shape.
-        {
-            Column(Modifier.fillMaxWidth().glassPiece(LocalRowShape.current).padding(12.dp)) {
-                Lbl("Icon shape", Modifier.padding(start = 2.dp, bottom = 10.dp), size = 15.sp, weight = FontWeight.Medium)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("Squircle", "Circle", "Rounded", "Square").forEachIndexed { v, name ->
-                        val on = st.iconShape == v
-                        Column(
-                            Modifier.weight(1f).clip(RoundedCornerShape(14.dp))
-                                .background(if (on) pal.acc.copy(alpha = 0.18f) else glass(0.07f))
-                                .border(if (on) 2.dp else 1.dp, if (on) pal.acc else glassEdge(), RoundedCornerShape(14.dp))
-                                .clickable { st.updateIconShape(v) }.padding(vertical = 12.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            CompositionLocalProvider(LocalIconShape provides v) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    st.pinned.take(2).mapNotNull { st.app(it) }.forEach { GlassIcon(it, 24.dp) }
-                                }
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            Lbl(name, size = 12.sp, color = if (on) pal.acc else pal.fg, weight = FontWeight.Medium)
-                        }
-                    }
-                }
+                FullSegs(listOf("Original", "Themed", "Coloured"), st.iconStyle) { st.updateIcons(it, st.iconPack) }
+                Spacer(Modifier.height(6.dp))
+                FullSegs(listOf("Squircle", "Circle", "Rounded", "Square"), st.iconShape) { st.updateIconShape(it) }
             }
         },
         // Glass: how frosted, and how dark. This page sits on the glass, so it shows the change as you go.
@@ -617,7 +560,7 @@ private fun LookPage(st: HomeState, ui: Ui) {
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Lbl("Glass", size = 15.sp, weight = FontWeight.Medium)
-                        Lbl("This page is on it, so you see the change as you go", size = 11.sp, color = pal.sub)
+                        Lbl("This page sits on it, so you see the change as you go", size = 12.sp, color = pal.sub)
                     }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -637,7 +580,7 @@ private fun LookPage(st: HomeState, ui: Ui) {
                         Box(Modifier.fillMaxHeight().fillMaxWidth(f.coerceAtLeast(0.08f)).clip(RoundedCornerShape(14.dp)).background(pal.acc))
                         Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Lbl("Lighter", Modifier.weight(1f), size = 11.sp, color = if (f > 0.2f) pal.ink else pal.sub)
-                            Lbl("Darker", size = 11.sp, color = pal.sub)
+                            Lbl("Darker", size = 12.sp, color = pal.sub)
                         }
                     }
                     Spacer(Modifier.width(8.dp))
@@ -645,9 +588,19 @@ private fun LookPage(st: HomeState, ui: Ui) {
                 }
                 if (st.glassFrost == 0 && !Glass.canLighten(LocalContext.current)) {
                     Spacer(Modifier.height(8.dp))
-                    Lbl("Light shows once the wallpaper is picked here again (above)", size = 11.sp, color = pal.sub, maxLines = 2)
+                    Lbl("Light shows once the wallpaper is picked here again (above)", size = 12.sp, color = pal.sub, maxLines = 2)
                 }
             }
+        },
+        {
+            Row3(
+                "wallpaper", "Wallpaper",
+                when {
+                    st.glass != null -> "The drawer and settings frost it"
+                    st.glassStale -> "It changed outside Ninomae. Pick it here again to frost the glass"
+                    else -> "Samsung won't share yours. Pick it here and the glass frosts it"
+                },
+            ) { GPill(if (st.glass != null) "Change" else "Pick", glyph = "image", accent = true) { ui.pickWallpaper() } }
         },
         { Row3("style", "Icon pack", if (packs.isEmpty()) "Install one from the Play Store and it shows here" else "Apps it doesn't cover keep their own icon") {} },
         *choices.map { p ->
@@ -678,7 +631,7 @@ private fun HomePage(st: HomeState, ui: Ui) {
                         MiniGrid(c, r, if (c > 6) 9.dp else 12.dp, lit = setOf(0, c + 2, 2 * c + 1), pal.acc)
                         Spacer(Modifier.height(8.dp))
                         Lbl(name, size = 13.sp, weight = FontWeight.Medium)
-                        Lbl("$c × $r", size = 11.sp, color = pal.sub)
+                        Lbl("$c × $r", size = 12.sp, color = pal.sub)
                     }
                 }
             }
@@ -737,7 +690,7 @@ private fun Row3(glyph: String, title: String, sub: String, wide: Boolean = fals
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Lbl(title, size = 15.sp, weight = FontWeight.Medium)
-                if (sub.isNotEmpty()) Lbl(sub, size = 11.sp, color = pal.sub, maxLines = 3)
+                if (sub.isNotEmpty()) Lbl(sub, size = 12.sp, color = pal.sub, maxLines = 3)
             }
             if (!wide) {
                 Spacer(Modifier.width(10.dp))
@@ -763,9 +716,9 @@ private fun NavRow(glyph: String, title: String, sub: String, onClick: () -> Uni
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Lbl(title, size = 15.sp, weight = FontWeight.Medium)
-            Lbl(sub, size = 11.sp, color = pal.sub)
+            Lbl(sub, size = 12.sp, color = pal.sub)
         }
-        Glyph("chevron_right", size = 20.dp, color = pal.dim)
+        Glyph("chevron_right", size = 20.dp, color = pal.sub)
     }
 }
 
@@ -797,6 +750,59 @@ private fun Access(glyph: String, title: String, sub: String, granted: Boolean, 
 }
 
 /** Choices as joined pills: round at the ends, the chosen one in the accent. */
+/** Look's preview: your wallpaper with the clock and your dock on it, in the icon style and shape picked below. */
+@Composable
+private fun LookPreview(st: HomeState) {
+    val pal = LocalPal.current
+    val pic = st.wallPreview ?: st.glass
+    val shape = RoundedCornerShape(26.dp)
+    val now = remember { System.currentTimeMillis() }
+    Box(Modifier.fillMaxWidth().height(210.dp).clip(shape).background(pal.l0).border(1.dp, glass(0.2f), shape)) {
+        if (pic != null) Image(
+            pic, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
+            alignment = androidx.compose.ui.BiasAlignment(0f, 0.25f), filterQuality = FilterQuality.High,
+        )
+        Column(
+            Modifier.align(Alignment.TopCenter).padding(top = 16.dp).clip(RoundedCornerShape(20.dp))
+                .background(pal.l0.copy(alpha = 0.6f)).border(1.dp, glass(0.16f), RoundedCornerShape(20.dp))
+                .padding(horizontal = 22.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Title(clockText(java.time.LocalDateTime.now()), size = 38.sp)
+            Lbl(android.text.format.DateFormat.format("EEE d MMM", now).toString(), size = 12.sp, color = pal.sub)
+        }
+        Row(
+            Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp).clip(RoundedCornerShape(22.dp))
+                .background(pal.l0.copy(alpha = 0.55f)).border(1.dp, glass(0.18f), RoundedCornerShape(22.dp)).padding(7.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            st.pinned.take(4).mapNotNull { st.app(it) }.forEach { GlassIcon(it, 44.dp) }
+            Box(Modifier.size(1.dp, 28.dp).background(glass(0.2f)))
+            Box(Modifier.size(44.dp).clip(iconShape(44.dp)).background(pal.acc), contentAlignment = Alignment.Center) {
+                Glyph("apps", size = 22.dp, color = pal.ink)
+            }
+        }
+    }
+}
+
+/** Segments sharing the full width, for choices that sit on their own line. */
+@Composable
+private fun FullSegs(options: List<String>, chosen: Int, onPick: (Int) -> Unit) {
+    val pal = LocalPal.current
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        options.forEachIndexed { i, o ->
+            val l = if (i == 0) 18.dp else 6.dp
+            val r = if (i == options.lastIndex) 18.dp else 6.dp
+            val on = i == chosen
+            Box(
+                Modifier.weight(1f).height(38.dp).clip(corners(l, r, r, l)).background(if (on) pal.acc else glass(0.12f)).clickable { onPick(i) },
+                contentAlignment = Alignment.Center,
+            ) { Lbl(o, size = 13.sp, color = if (on) pal.ink else pal.fg, weight = if (on) FontWeight.SemiBold else FontWeight.Normal) }
+        }
+    }
+}
+
 @Composable
 private fun Segs(options: List<String>, chosen: Int, onPick: (Int) -> Unit) {
     val pal = LocalPal.current
@@ -900,7 +906,7 @@ private fun EdgePage(st: HomeState) {
         Row(Modifier.padding(start = 4.dp, top = 18.dp, bottom = 8.dp), verticalAlignment = Alignment.Bottom) {
             Title("Its apps", size = 18.sp)
             Spacer(Modifier.width(10.dp))
-            Lbl("drag the handle to reorder", Modifier.padding(bottom = 2.dp), size = 12.sp, color = pal.dim)
+            Lbl("drag the handle to reorder", Modifier.padding(bottom = 2.dp), size = 12.5.sp, color = pal.sub)
         }
         val apps = st.edgeList()
         val step = with(density) { (54.dp + 4.dp).toPx() }
@@ -1024,7 +1030,7 @@ private fun PhotosPage(st: HomeState) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Lbl(if (testing) "Checking…" else if (ok) "Connected" else if (status != null) "Not connected" else "Check the connection", size = 15.sp)
-                Lbl(status?.removePrefix("Not connected: ")?.replaceFirstChar { it.uppercase() } ?: "Reaches the server with your key", size = 11.sp, color = pal.sub, maxLines = 2)
+                Lbl(status?.removePrefix("Not connected: ")?.replaceFirstChar { it.uppercase() } ?: "Reaches the server with your key", size = 12.sp, color = pal.sub, maxLines = 2)
             }
             Spacer(Modifier.width(8.dp))
             GPill("Test") { if (!testing) test() }

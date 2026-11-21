@@ -271,7 +271,7 @@ class HomeState private constructor(private val ctx: Context) {
         reflow()
     }
 
-    /** 0 the app's own, 1 themed (monochrome in your colours). */
+    /** 0 the app's own, 1 themed (monochrome in your colours), 2 coloured (monochrome in each app's own colour). */
     var iconStyle by mutableIntStateOf(prefs.getInt("iconStyle", 0))
         private set
     var iconPack by mutableStateOf(prefs.getString("iconPack", null))

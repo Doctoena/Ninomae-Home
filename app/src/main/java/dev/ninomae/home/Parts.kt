@@ -29,6 +29,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -123,19 +125,64 @@ fun Piece(
 fun Modifier.press(onLong: (() -> Unit)? = null, onTap: () -> Unit): Modifier =
     combinedClickable(onClick = onTap, onLongClick = onLong)
 
-/** Themed icons on or off, read wherever icons are drawn. */
-val LocalThemedIcons = androidx.compose.runtime.staticCompositionLocalOf { false }
+/** The icon style, read wherever icons are drawn: 0 the apps' own, 1 themed in the accent, 2 themed in each app's colour. */
+val LocalIconStyle = androidx.compose.runtime.staticCompositionLocalOf { 0 }
+
+/**
+ * The colour a themed icon is drawn in: the accent, or (coloured style) the app's own colour, a light pastel
+ * on a dark theme and a deeper shade on a light one so it still stands out from the glass.
+ */
+@Composable
+fun themedColour(app: AppEntry): Color {
+    val pal = LocalPal.current
+    if (LocalIconStyle.current != 2) return pal.acc
+    val hs = AppHue.of(app) ?: return pal.acc
+    return Color.hsl(hs.first, hs.second, if (pal.fg.luminance() < 0.5f) 0.40f else 0.78f)
+}
+
+/**
+ * Each app's own colour as hue and saturation: the hue of the icon's most vivid pixels (so Firefox reads
+ * orange, not the brown its colours average to). Grey and white icons have none.
+ */
+object AppHue {
+    // Per app, with the icon it came from: a reloaded icon (new pack or style) is worked out again, and old ones aren't kept.
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Pair<ImageBitmap, Pair<Float, Float>?>>()
+
+    fun of(app: AppEntry): Pair<Float, Float>? =
+        (cache[app.key]?.takeIf { it.first === app.icon } ?: (app.icon to compute(app.icon)).also { cache[app.key] = it }).second
+
+    private fun compute(img: ImageBitmap): Pair<Float, Float>? = runCatching {
+        val bmp = android.graphics.Bitmap.createScaledBitmap(img.asAndroidBitmap(), 24, 24, true)
+        val hsv = FloatArray(3)
+        var x = 0.0; var y = 0.0; var w = 0.0; var sat = 0.0
+        for (py in 0 until 24) for (px in 0 until 24) {
+            val p = bmp.getPixel(px, py)
+            if ((p ushr 24) < 200) continue
+            android.graphics.Color.colorToHSV(p, hsv)
+            val wt = (hsv[1] * hsv[2]).toDouble().let { it * it }
+            if (wt < 0.04) continue
+            val a = Math.toRadians(hsv[0].toDouble())
+            x += kotlin.math.cos(a) * wt; y += kotlin.math.sin(a) * wt; w += wt; sat += hsv[1] * wt
+        }
+        if (w < 0.5) return@runCatching null
+        val hue = ((Math.toDegrees(kotlin.math.atan2(y, x)) + 360.0) % 360.0).toFloat()
+        hue to (0.35f + 0.5f * (sat / w).toFloat()).coerceAtMost(0.85f)
+    }.getOrNull()
+}
 
 @Composable
 fun AppIcon(app: AppEntry?, size: Dp, modifier: Modifier = Modifier) {
     val pal = LocalPal.current
     when {
         app == null -> Box(modifier.size(size).clip(iconShape(size)).background(pal.l5))
-        LocalThemedIcons.current && app.mono != null -> Box(
-            modifier.size(size).clip(iconShape(size)).background(mix(pal.l4, pal.acc, 0.16f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(app.mono, app.label, Modifier.size(size * 0.86f), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(pal.acc))
+        LocalIconStyle.current >= 1 && app.mono != null -> {
+            val c = themedColour(app)
+            Box(
+                modifier.size(size).clip(iconShape(size)).background(mix(pal.l4, c, 0.16f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(app.mono, app.label, Modifier.size(size * 0.86f), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(c))
+            }
         }
         // The squircle leaves apps' own icons as they draw them; other shapes trim them to it.
         LocalIconShape.current == 0 -> Image(app.icon, app.label, modifier.size(size))

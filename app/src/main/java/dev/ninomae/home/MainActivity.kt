@@ -69,7 +69,7 @@ class MainActivity : ComponentActivity() {
         ui.restore = { openBackup.launch(arrayOf("application/json", "text/plain", "*/*")) }
         setContent {
             NinomaeTheme(st.colourSource, st.swatch, st.wallSeed) {
-              androidx.compose.runtime.CompositionLocalProvider(LocalThemedIcons provides (st.iconStyle == 1), LocalIconShape provides st.iconShape) {
+              androidx.compose.runtime.CompositionLocalProvider(LocalIconStyle provides st.iconStyle, LocalIconShape provides st.iconShape) {
                 // Home never closes on back; back only closes what's open.
                 BackHandler { if (ui.layer != Layer.None) ui.back() else ui.editing = false }
                 Home(st, ui)

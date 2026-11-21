@@ -1,6 +1,8 @@
 package dev.ninomae.home
 
 import android.app.Activity
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.PaddingValues
@@ -245,12 +247,18 @@ fun WidgetPicker(st: HomeState, ui: Ui, progress: () -> Float, modifier: Modifie
                     open = open == "ninomae", first = true, last = total == 1, tinted = true,
                 ) { open = if (open == "ninomae") "" else "ninomae" }
             }
+            // W2: a gallery, two across, each card showing the widget itself (live, scaled down) on the wallpaper.
             if (open == "ninomae") item(key = "ninomae-list") {
                 Expanded {
-                    ninomaeWidgets.forEach { (kind, name, _) ->
-                        Entry(name, ninomaeSizes(kind, screen), preview = { NinomaePreview(kind) }) { size ->
-                            if (ui.pickForFeed) st.addFeedNinomae(kind) else st.addNinomaeWidget(kind, screen, maxOf(ui.page, 0), size)
-                            ui.close()
+                    ninomaeWidgets.chunked(2).forEach { pair ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            pair.forEach { (kind, name, _) ->
+                                GalleryCard(st, ui, kind, name, ninomaeSizes(kind, screen), Modifier.weight(1f)) { size ->
+                                    if (ui.pickForFeed) st.addFeedNinomae(kind) else st.addNinomaeWidget(kind, screen, maxOf(ui.page, 0), size)
+                                    ui.close()
+                                }
+                            }
+                            if (pair.size == 1) Spacer(Modifier.weight(1f))
                         }
                     }
                 }
@@ -295,9 +303,9 @@ private fun AppHeader(icon: @Composable () -> Unit, name: String, count: String,
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Lbl(name, size = 15.sp)
-            Lbl(count, size = 11.sp, color = pal.sub)
+            Lbl(count, size = 12.sp, color = pal.sub)
         }
-        Glyph(if (open) "expand_less" else "chevron_right", size = 20.dp, color = pal.dim)
+        Glyph(if (open) "expand_less" else "chevron_right", size = 20.dp, color = pal.sub)
     }
 }
 
@@ -340,41 +348,57 @@ private fun Entry(name: String, sizes: List<Pair<Int, Int>>, preview: @Composabl
     }
 }
 
-/** A small stand-in for each of Ninomae's widgets, in the widget's own look. */
+/**
+ * One of Ninomae's widgets in the gallery (W2): the widget itself, live and scaled down, on a patch of your
+ * wallpaper, then its name, its sizes (when it has more than one) and a rose ＋. Tapping the card adds it too.
+ */
 @Composable
-private fun NinomaePreview(kind: String) {
+private fun GalleryCard(st: HomeState, ui: Ui, kind: String, name: String, sizes: List<Pair<Int, Int>>, modifier: Modifier, onAdd: (Pair<Int, Int>) -> Unit) {
     val pal = LocalPal.current
-    Box(Modifier.fillMaxSize().padding(10.dp)) {
-        when (kind) {
-            "clock" -> Row(Modifier.align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically) {
-                Title(clockText(java.time.LocalDateTime.now()), size = 26.sp)
-                Spacer(Modifier.width(10.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) { repeat(3) { Box(Modifier.size(40.dp, 10.dp).clip(RoundedCornerShape(4.dp)).background(glass(0.12f))) } }
-            }
-            "photos" -> Column(Modifier.align(Alignment.CenterStart), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Box(Modifier.size(110.dp, 34.dp).clip(RoundedCornerShape(10.dp)).background(pal.acc.copy(alpha = 0.35f)), contentAlignment = Alignment.Center) {
-                    Glyph("photo_library", size = 18.dp, color = pal.fg)
+    var chosen by remember { mutableStateOf(0) }
+    val (w, h) = sizes[chosen.coerceIn(0, sizes.lastIndex)]
+    // The widget at the size it would really have on this screen.
+    val cw = if (ui.cellWdp > 0f) ui.cellWdp else 90f
+    val ch = if (ui.cellHdp > 0f) ui.cellHdp else 100f
+    val ww = (cw * w - 8).dp
+    val wh = (ch * h - 8).dp
+    val pic = st.wallPreview ?: st.glass
+    Column(
+        modifier.clip(RoundedCornerShape(20.dp)).background(glass(0.07f)).border(1.dp, glass(0.15f), RoundedCornerShape(20.dp))
+            .clickable { onAdd(sizes[chosen]) }.padding(6.dp),
+    ) {
+        BoxWithConstraints(
+            Modifier.fillMaxWidth().height(124.dp).clip(RoundedCornerShape(15.dp)).background(Color.Black.copy(alpha = 0.2f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (pic != null) Image(pic, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alignment = Alignment.BottomCenter)
+            val k = minOf((maxWidth - 12.dp) / ww, (maxHeight - 12.dp) / wh, 1f)
+            Box(
+                Modifier.requiredSize(ww, wh).graphicsLayer { scaleX = k; scaleY = k },
+                contentAlignment = Alignment.Center,
+            ) { NinomaeWidget(st, ui, kind, preview = true) }
+            // The preview is only to look at: this sits on top, so taps add the widget and never reach it.
+            Box(Modifier.fillMaxSize().clickable { onAdd(sizes[chosen]) })
+        }
+        Row(Modifier.fillMaxWidth().padding(start = 8.dp, top = 8.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Lbl(name, size = 14.sp, weight = FontWeight.Medium)
+                if (sizes.size == 1) Num("$w\u00d7$h", size = 12.sp, color = pal.sub)
+                else Row(Modifier.padding(top = 3.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    sizes.forEachIndexed { i, (sw, sh) ->
+                        val on = i == chosen
+                        Box(
+                            Modifier.height(22.dp).clip(RoundedCornerShape(11.dp)).background(if (on) pal.acc else glass(0.10f))
+                                .clickable { chosen = i }.padding(horizontal = 7.dp),
+                            contentAlignment = Alignment.Center,
+                        ) { Num("$sw\u00d7$sh", size = 10.sp, color = if (on) pal.ink else pal.fg) }
+                    }
                 }
-                Box(Modifier.size(110.dp, 14.dp).clip(RoundedCornerShape(5.dp)).background(glass(0.14f)))
             }
-            "calendar" -> Column(Modifier.align(Alignment.CenterStart), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Lbl(java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("MMMM")), size = 13.sp, weight = FontWeight.Black, family = TitleFont)
-                repeat(3) { r -> Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { repeat(7) { c -> Box(Modifier.size(9.dp).clip(RoundedCornerShape(3.dp)).background(if (r == 1 && c == 3) pal.acc else glass(0.14f))) } } }
-            }
-            "greeting" -> Column(Modifier.align(Alignment.CenterStart)) {
-                Lbl("Good " + when (java.time.LocalTime.now().hour) { in 5..11 -> "morning"; in 12..17 -> "afternoon"; else -> "evening" }, size = 13.sp, weight = FontWeight.SemiBold)
-                Lbl(java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM")), size = 10.sp, color = pal.sub)
-            }
-            "player" -> Row(Modifier.align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(pal.acc.copy(alpha = 0.4f)), contentAlignment = Alignment.Center) { Glyph("music_note", size = 20.dp, color = pal.fg) }
-                Spacer(Modifier.width(8.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { Box(Modifier.size(60.dp, 9.dp).clip(RoundedCornerShape(4.dp)).background(glass(0.2f))); Box(Modifier.size(40.dp, 8.dp).clip(RoundedCornerShape(4.dp)).background(glass(0.12f))) }
-            }
-            else -> Column(Modifier.align(Alignment.CenterStart), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Glyph(if (kind == "stack") "view_agenda" else "history", size = 18.dp, color = pal.acc)
-                Box(Modifier.size(90.dp, 8.dp).clip(RoundedCornerShape(4.dp)).background(glass(0.14f)))
-                Box(Modifier.size(60.dp, 8.dp).clip(RoundedCornerShape(4.dp)).background(glass(0.10f)))
-            }
+            Box(
+                Modifier.size(36.dp).clip(CircleShape).background(pal.acc).clickable { onAdd(sizes[chosen]) },
+                contentAlignment = Alignment.Center,
+            ) { Glyph("add", size = 20.dp, color = pal.ink) }
         }
     }
 }

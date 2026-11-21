@@ -163,6 +163,9 @@ fun iconShapeOf(kind: Int, size: Dp): androidx.compose.ui.graphics.Shape = when 
 @Composable
 fun iconShape(size: Dp) = iconShapeOf(LocalIconShape.current, size)
 
+/** The dock's height; edit mode's bar keeps it, so the grid above never resizes. */
+val DOCK_H = 70.dp
+
 /** Rounded rect with its own corners: outer edges big, edges that touch a neighbour small. */
 fun corners(tl: Dp, tr: Dp, br: Dp, bl: Dp) =
     RoundedCornerShape(topStart = tl, topEnd = tr, bottomEnd = br, bottomStart = bl)
