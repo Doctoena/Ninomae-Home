@@ -1,5 +1,7 @@
 package dev.ninomae.home
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.gestures.detectDragGestures
 import android.accessibilityservice.AccessibilityService
 import androidx.compose.animation.core.animateDpAsState
@@ -262,7 +264,9 @@ private fun ItemView(st: HomeState, ui: Ui, item: HomeItem, cw: Dp, ch: Dp, badg
                     ),
                 ) { AppIcon(app, 56.dp) }
             }
-            "folder" -> if (item.w >= 2 && item.h >= 2) BigFolder(st, ui, item, badged, hold) else HomeIcon(
+            "folder" -> if (item.w >= 2 && item.h >= 2) BigFolder(st, ui, item, badged, hold)
+            else if (item.w >= 2) FolderPill(st, ui, item, badged, hold)
+            else HomeIcon(
                 st, item.name.ifBlank { "Folder" },
                 st.dots && item.apps.any { st.app(it)?.pkg in badged },
                 Modifier.holdable(onTap = { if (!ui.editing) ui.openFolder(item.id, iconRect) }, onHold = hold),
@@ -534,6 +538,51 @@ private fun WidgetStack(st: HomeState, ui: Ui, item: HomeItem, wDp: Float, hDp: 
 }
 
 /** A folder big enough to show its apps (BF1): frosted like the small ones, names under the apps, tap them straight from home. */
+/**
+ * A folder stretched to 2 × 1 (P3c+): one glass pill with its name in a rose tab set inside it, then its
+ * apps as they look everywhere else. When they don't all fit, the last spot says how many more.
+ * Tap to open it, hold to move it.
+ */
+@Composable
+private fun FolderPill(st: HomeState, ui: Ui, item: HomeItem, badged: Set<String>, hold: (Offset) -> Unit) {
+    val pal = LocalPal.current
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        val h = minOf(maxHeight, 60.dp)
+        val tabMax = maxWidth * 0.45f
+        val icon = h - 14.dp
+        val gap = 6.dp
+        Row(
+            Modifier.fillMaxWidth().height(h).frosted(st, RoundedCornerShape(h / 2), wash = 0.34f, edge = 0.26f)
+                .holdable(onTap = { if (!ui.editing) ui.openFolder(item.id) }, onHold = hold).padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier.fillMaxHeight().widthIn(max = tabMax).clip(RoundedCornerShape(50)).background(pal.acc).padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) { Lbl(item.name.ifBlank { "Folder" }, size = 14.sp, color = pal.ink, weight = FontWeight.Black, family = TitleFont) }
+            Spacer(Modifier.width(8.dp))
+            BoxWithConstraints(Modifier.weight(1f)) {
+                val slots = ((maxWidth + gap) / (icon + gap)).toInt().coerceAtLeast(1)
+                val apps = item.apps
+                val shown = if (apps.size <= slots) apps else apps.take(slots - 1)
+                Row(horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
+                    shown.forEach { k ->
+                        val app = st.app(k)
+                        Box {
+                            if (app != null) GlassIcon(app, icon) else AppIcon(null, icon)
+                            if (st.dots && app != null && app.pkg in badged) NoteBar()
+                        }
+                    }
+                    if (apps.size > shown.size) Box(
+                        Modifier.size(icon).clip(iconShape(icon)).background(glass(0.10f)).border(1.dp, glass(0.16f), iconShape(icon)),
+                        contentAlignment = Alignment.Center,
+                    ) { Lbl("+${apps.size - shown.size}", size = 15.sp, color = pal.acc, weight = FontWeight.Bold) }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun BigFolder(st: HomeState, ui: Ui, item: HomeItem, badged: Set<String>, hold: (Offset) -> Unit) {
     val pal = LocalPal.current

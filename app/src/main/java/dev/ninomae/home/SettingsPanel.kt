@@ -529,7 +529,7 @@ private fun LookPage(st: HomeState, ui: Ui) {
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                Segs(listOf("Wallpaper", "Swatch", "Samsung"), listOf(1, 2, 0).indexOf(st.colourSource)) { st.updateColourSource(listOf(1, 2, 0)[it]) }
+                FullSegs(listOf("Wallpaper", "Swatch", "Samsung"), listOf(1, 2, 0).indexOf(st.colourSource)) { st.updateColourSource(listOf(1, 2, 0)[it]) }
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     swatches.forEach { (c, _) ->
@@ -760,7 +760,7 @@ private fun LookPreview(st: HomeState) {
     Box(Modifier.fillMaxWidth().height(210.dp).clip(shape).background(pal.l0).border(1.dp, glass(0.2f), shape)) {
         if (pic != null) Image(
             pic, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
-            alignment = androidx.compose.ui.BiasAlignment(0f, 0.25f), filterQuality = FilterQuality.High,
+            alignment = androidx.compose.ui.BiasAlignment(0f, -0.35f), filterQuality = FilterQuality.High,
         )
         Column(
             Modifier.align(Alignment.TopCenter).padding(top = 16.dp).clip(RoundedCornerShape(20.dp))
@@ -773,7 +773,7 @@ private fun LookPreview(st: HomeState) {
         }
         Row(
             Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp).clip(RoundedCornerShape(22.dp))
-                .background(pal.l0.copy(alpha = 0.55f)).border(1.dp, glass(0.18f), RoundedCornerShape(22.dp)).padding(7.dp),
+                .background(pal.l0.copy(alpha = 0.75f)).border(1.dp, glass(0.20f), RoundedCornerShape(22.dp)).padding(7.dp),
             horizontalArrangement = Arrangement.spacedBy(7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

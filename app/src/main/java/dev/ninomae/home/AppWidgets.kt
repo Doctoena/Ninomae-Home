@@ -339,10 +339,12 @@ private fun Entry(name: String, sizes: List<Pair<Int, Int>>, preview: @Composabl
                         contentAlignment = Alignment.Center,
                     ) { Num("$w\u00d7$h", size = 11.sp, color = if (on) pal.ink else pal.fg) }
                 }
-                Box(
-                    Modifier.size(28.dp).clip(CircleShape).background(glass(0.10f)).clickable { onAdd(sizes[chosen]) },
-                    contentAlignment = Alignment.Center,
-                ) { Glyph("add", size = 17.dp, color = pal.acc) }
+                // 28 dp to look at, 44 dp to tap.
+                Box(Modifier.size(44.dp).clip(CircleShape).clickable { onAdd(sizes[chosen]) }, contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(28.dp).clip(CircleShape).background(glass(0.10f)), contentAlignment = Alignment.Center) {
+                        Glyph("add", size = 17.dp, color = pal.acc)
+                    }
+                }
             }
         }
     }

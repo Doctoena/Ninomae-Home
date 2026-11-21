@@ -131,7 +131,7 @@ private const val ROW = 44
  * Otherwise (the widgets page) it shows up to three rows and takes the height it needs.
  */
 @Composable
-fun CalendarWidget(st: HomeState, ui: Ui, modifier: Modifier, fit: Boolean) {
+fun CalendarWidget(st: HomeState, ui: Ui, modifier: Modifier, fit: Boolean, hideNext: Boolean = false) {
     val pal = LocalPal.current
     val ctx = LocalContext.current
     val now = rememberNow()
@@ -145,8 +145,14 @@ fun CalendarWidget(st: HomeState, ui: Ui, modifier: Modifier, fit: Boolean) {
     // The list is this week and next week only (weeks start on the locale's first day).
     val first = WeekFields.of(Locale.getDefault()).firstDayOfWeek
     val weekStart = today.minusDays(((today.dayOfWeek.value - first.value + 7) % 7).toLong())
-    val events by produceState(emptyList<CalEvent>(), allowed, stamp, now.hour, today) {
+    val upcoming by produceState(emptyList<CalEvent>(), allowed, stamp, now.hour, today) {
         value = if (allowed) withContext(Dispatchers.IO) { CalData.upcoming(ctx, weekStart.plusDays(14), 6) } else emptyList()
+    }
+    // On the widgets page the rose line above already shows the next event, so the list skips it there.
+    val shownAbove = if (hideNext) Glance.today.firstOrNull() else null
+    val events = remember(upcoming, shownAbove, today) {
+        val i = shownAbove?.let { n -> upcoming.indexOfFirst { it.day == today && it.title == n.title } } ?: -1
+        if (i < 0) upcoming else upcoming.filterIndexed { j, _ -> j != i }
     }
     val lead = (shown.atDay(1).dayOfWeek.value - first.value + 7) % 7
     val weeks = (lead + shown.lengthOfMonth() + 6) / 7

@@ -281,10 +281,10 @@ private fun caption(p: Photos.Photo?, count: Int): String {
 
 @Composable
 private fun Arrow(glyph: String, onClick: () -> Unit) {
-    Box(
-        Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(glass(0.10f)).clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) { Glyph(glyph, size = 18.dp) }
+    // 32 dp to look at, 44 dp to tap.
+    Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(32.dp).clip(RoundedCornerShape(11.dp)).background(glass(0.10f)), contentAlignment = Alignment.Center) { Glyph(glyph, size = 18.dp) }
+    }
 }
 
 @Composable

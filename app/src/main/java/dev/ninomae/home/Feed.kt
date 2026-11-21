@@ -166,7 +166,7 @@ fun FeedPage(st: HomeState, ui: Ui, compact: Boolean) {
                     val width = if (row.size == 2 || item.w == 2) Modifier.weight(1f) else Modifier.fillMaxWidth(0.5f)
                     Column(width, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         // The calendar draws its own joined glass pieces and takes the height it needs.
-                        if (item.type == "nwidget" && item.kind == "calendar") CalendarWidget(st, ui, Modifier.fillMaxWidth(), fit = false)
+                        if (item.type == "nwidget" && item.kind == "calendar") CalendarWidget(st, ui, Modifier.fillMaxWidth(), fit = false, hideNext = true)
                         // So does the photo widget, at its rows' height.
                         else if (item.type == "nwidget" && item.kind == "photos") PhotoWidget(st, ui, Modifier.fillMaxWidth().height((FEED_ROW * tall).dp))
                         else BoxWithConstraints(Modifier.fillMaxWidth().height((FEED_ROW * tall).dp).frosted(st, shape, wash = 0.30f, edge = 0.2f)) {
@@ -212,10 +212,12 @@ private fun TodayBlock(st: HomeState) {
     if (!showCard && m == null) return
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (showCard && events.isEmpty()) {
-            // Nothing planned (M1): one slim rose line instead of the big card, so the widgets move up.
-            // The alarm, when there's one soon, is a chip at its end.
-            val shape = if (m != null) corners(26.dp, 26.dp, Small, Small) else RoundedCornerShape(26.dp)
+        if (showCard) {
+            // U1 / M1: always one slim rose line. The next event (its time and how soon), or nothing planned,
+            // with the alarm as a chip at its end. Later events are in the calendar widget, not repeated here.
+            val next = events.firstOrNull()
+            val canRead = st.glanceCalendar && Glance.has(ctx, android.Manifest.permission.READ_CALENDAR)
+            val shape = if (m != null) corners(Big, Big, Small, Small) else RoundedCornerShape(Big)
             Row(
                 Modifier.fillMaxWidth().height(52.dp).clip(shape).background(pal.acc).clickable { Actions.calendar(ctx) }
                     .padding(start = 18.dp, end = 8.dp),
@@ -223,12 +225,28 @@ private fun TodayBlock(st: HomeState) {
             ) {
                 Glyph("event", size = 19.dp, color = pal.ink, fill = true)
                 Spacer(Modifier.width(10.dp))
-                // Only claim nothing's planned when the calendar can be read; otherwise this line is just the alarm.
-                val canRead = st.glanceCalendar && Glance.has(ctx, android.Manifest.permission.READ_CALENDAR)
-                Lbl(if (canRead) "Nothing planned today" else "Next alarm", Modifier.weight(1f), size = 17.sp, color = pal.ink, weight = FontWeight.Black, family = TitleFont)
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    if (next != null) {
+                        Lbl(next.title, Modifier.weight(1f, fill = false), size = 17.sp, color = pal.ink, weight = FontWeight.Black, family = TitleFont)
+                        Spacer(Modifier.width(8.dp))
+                        val mins = ((next.begin - System.currentTimeMillis()) / 60_000).toInt()
+                        val soon = when {
+                            next.begin <= 0 -> null
+                            mins < 1 -> "now"
+                            mins < 60 -> "in $mins min"
+                            mins < 180 -> "in ${mins / 60} h ${mins % 60} min"
+                            else -> null
+                        }
+                        Lbl(listOfNotNull(next.time, soon).joinToString("  ·  "), size = 13.sp, color = pal.ink, weight = FontWeight.Medium)
+                    } else {
+                        // Only claim nothing's planned when the calendar can be read; otherwise this line is just the alarm.
+                        Lbl(if (canRead) "Nothing planned today" else "Next alarm", size = 17.sp, color = pal.ink, weight = FontWeight.Black, family = TitleFont)
+                    }
+                }
                 alarm?.let {
                     val t = android.text.format.DateFormat.getTimeFormat(ctx).format(java.util.Date(it))
                     val day = java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    Spacer(Modifier.width(6.dp))
                     Row(
                         Modifier.height(34.dp).clip(RoundedCornerShape(17.dp)).background(pal.ink.copy(alpha = 0.12f))
                             .clickable { Actions.clock(ctx) }.padding(horizontal = 12.dp),
@@ -236,62 +254,8 @@ private fun TodayBlock(st: HomeState) {
                     ) {
                         Glyph("alarm", size = 15.dp, color = pal.ink)
                         Spacer(Modifier.width(6.dp))
-                        Lbl(if (day != now.toLocalDate()) "$t tomorrow" else t, size = 13.sp, color = pal.ink, weight = FontWeight.Medium)
-                    }
-                }
-            }
-        } else if (showCard) {
-            val shape = if (m != null) corners(Big, Big, Small, Small) else RoundedCornerShape(Big)
-            Column(
-                Modifier.fillMaxWidth().clip(shape).background(pal.acc).clickable { Actions.calendar(ctx) }.padding(16.dp),
-            ) {
-                val next = events.firstOrNull()
-                val alarmText = alarm?.let {
-                    val t = android.text.format.DateFormat.getTimeFormat(ctx).format(java.util.Date(it))
-                    val day = java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-                    if (day != now.toLocalDate()) "$t  Alarm, tomorrow" else "$t  Alarm"
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Glyph("event", size = 20.dp, color = pal.ink, fill = true)
-                    Spacer(Modifier.width(8.dp))
-                    Lbl(if (next != null) "Up next" else "Today", Modifier.weight(1f), size = 12.sp, color = pal.ink, weight = FontWeight.Bold)
-                    next?.takeIf { it.begin > 0 }?.let { e ->
-                        val mins = ((e.begin - System.currentTimeMillis()) / 60_000).toInt()
-                        val note = when {
-                            mins < 1 -> "now"
-                            mins < 60 -> "in $mins min"
-                            mins < 180 -> "in ${mins / 60} h ${mins % 60} min"
-                            else -> null
-                        }
-                        note?.let { Lbl(it, size = 12.sp, color = pal.ink, weight = FontWeight.Bold) }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Lbl(next?.title ?: "Nothing planned", Modifier.weight(1f, fill = false), size = 26.sp, color = pal.ink, weight = FontWeight.Black, family = TitleFont)
-                    next?.let { e ->
-                        Spacer(Modifier.width(14.dp))
-                        Lbl(if (e.end != null) "${e.time} – ${e.end}" else e.time, size = 13.sp, color = pal.ink, weight = FontWeight.Medium)
-                    }
-                }
-                val chips = buildList {
-                    events.drop(1).take(if (alarmText != null) 1 else 2).forEach { add("event" to "${it.time}  ${it.title}") }
-                    alarmText?.let { add("alarm" to it) }
-                }
-                if (chips.isNotEmpty()) {
-                    Spacer(Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        chips.forEach { (g, t) ->
-                            Row(
-                                Modifier.weight(1f, fill = false).height(30.dp).clip(RoundedCornerShape(15.dp)).background(pal.ink.copy(alpha = 0.12f))
-                                    .clickable { if (g == "alarm") Actions.clock(ctx) else Actions.calendar(ctx) }.padding(horizontal = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Glyph(g, size = 14.dp, color = pal.ink)
-                                Spacer(Modifier.width(6.dp))
-                                Lbl(t, size = 12.sp, color = pal.ink, weight = FontWeight.Medium)
-                            }
-                        }
+                        // With an event on the line, the chip keeps to the time.
+                        Lbl(if (day != now.toLocalDate() && next == null) "$t tomorrow" else t, size = 13.sp, color = pal.ink, weight = FontWeight.Medium)
                     }
                 }
             }
