@@ -9,4 +9,6 @@ These fonts ship inside the app (`app/src/main/res/font`) under their own licenc
 | Rubik | SIL Open Font License 1.1 |
 | Material Symbols Rounded | Apache License 2.0 |
 
+The app ships a trimmed copy of Material Symbols Rounded, holding only the icons it uses (made by `tools/subset_symbols.py`). The full font is in `tools/fonts`.
+
 The app's own code is under the GNU GPL v3 (see LICENSE).

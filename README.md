@@ -126,6 +126,8 @@ Needs a JDK 17 or newer. The release build is the one to use day to day, since i
 adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 
+The app carries only the Material Symbols icons it uses. After drawing a new icon (`Glyph("some_icon")`), run `python3 tools/subset_symbols.py` (needs `pip install fonttools`) to add it to the trimmed font, or it shows as plain letters.
+
 A release build is signed with your own key if `~/.gradle/gradle.properties` names one (`NINOMAE_STORE_FILE`, `NINOMAE_STORE_PASSWORD`, `NINOMAE_KEY_ALIAS`, `NINOMAE_KEY_PASSWORD`), and with the debug key otherwise. A build you make yourself can't update the one from Releases (they're signed differently), so uninstall one before installing the other.
 
 ## Access it asks for
