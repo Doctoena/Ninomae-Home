@@ -20,6 +20,13 @@ import java.io.File
 object Glass {
     private fun file(ctx: Context) = File(ctx.filesDir, "glass.png")
     private fun previewFile(ctx: Context) = File(ctx.filesDir, "wall.png")
+    /** The wallpaper small and sharp, so the glass can be frosted again at any strength. */
+    private fun baseFile(ctx: Context) = File(ctx.filesDir, "glass_base.png")
+    /** A light frost needs the sharp copy, which only wallpapers picked since it was added have. */
+    fun canLighten(ctx: Context) = baseFile(ctx).exists()
+
+    /** Wallpapers set before the sharp copy was kept: their first frosted copy, to frost more from. */
+    private fun mediumFile(ctx: Context) = File(ctx.filesDir, "glass_medium.png")
 
     fun load(ctx: Context): ImageBitmap? =
         file(ctx).takeIf { it.exists() }?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() }
@@ -38,10 +45,30 @@ object Glass {
     fun forget(ctx: Context) {
         file(ctx).delete()
         previewFile(ctx).delete()
+        baseFile(ctx).delete()
+        mediumFile(ctx).delete()
+    }
+
+    /**
+     * Frost the glass again at [level] (0 light, 1 medium, 2 heavy) and save it. From the sharp copy when
+     * there is one; otherwise from the first frosted copy, which can only be frosted more.
+     */
+    suspend fun refrost(ctx: Context, level: Int): ImageBitmap? = withContext(Dispatchers.IO) {
+        runCatching {
+            val base = baseFile(ctx)
+            val out = if (base.exists()) frost(BitmapFactory.decodeFile(base.path), level) else {
+                val medium = mediumFile(ctx)
+                if (!medium.exists()) file(ctx).takeIf { it.exists() }?.copyTo(medium) ?: return@runCatching null
+                val src = BitmapFactory.decodeFile(medium.path)
+                if (level >= 2) frost(src, 2, extra = true) else src
+            }
+            file(ctx).outputStream().use { out.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            out.asImageBitmap()
+        }.getOrNull()
     }
 
     /** Sets [uri] as the home screen wallpaper; returns its blurred copy, a small sharp one and its main colour. */
-    suspend fun setWallpaper(ctx: Context, uri: Uri): Set? = withContext(Dispatchers.IO) {
+    suspend fun setWallpaper(ctx: Context, uri: Uri, level: Int = 1): Set? = withContext(Dispatchers.IO) {
         runCatching {
             val src = ImageDecoder.decodeBitmap(ImageDecoder.createSource(ctx.contentResolver, uri)) { d, info, _ ->
                 d.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
@@ -52,7 +79,10 @@ object Glass {
                 }
             }
             val id = WallpaperManager.getInstance(ctx).setBitmap(src, null, true, WallpaperManager.FLAG_SYSTEM)
-            val frosted = frost(src)
+            val small = Bitmap.createScaledBitmap(src, 200, (src.height * 200f / src.width).toInt().coerceAtLeast(1), true)
+            baseFile(ctx).outputStream().use { small.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            mediumFile(ctx).delete()
+            val frosted = frost(small, level)
             file(ctx).outputStream().use { frosted.compress(Bitmap.CompressFormat.PNG, 100, it) }
             val pw = 480
             val preview = Bitmap.createScaledBitmap(src, pw, (src.height * pw.toFloat() / src.width).toInt().coerceAtLeast(1), true)
@@ -87,15 +117,17 @@ object Glass {
     }
 
     /** Shrinks the picture and box-blurs it three times (close to a gaussian); drawn big, it reads as frosted. */
-    private fun frost(src: Bitmap): Bitmap {
+    private fun frost(src: Bitmap, level: Int = 1, extra: Boolean = false): Bitmap {
         val w = 200
         val h = (src.height * w.toFloat() / src.width).toInt().coerceAtLeast(1)
-        val small = Bitmap.createScaledBitmap(src, w, h, true)
+        val small = if (src.width == w) src else Bitmap.createScaledBitmap(src, w, h, true)
         val px = IntArray(w * h)
         small.getPixels(px, 0, w, 0, 0, w, h)
+        // Light, medium (the original) and heavy; [extra] adds to a copy that's already medium.
+        val r = if (extra) 4 else when (level) { 0 -> 2; 2 -> 7; else -> 4 }
         repeat(3) {
-            boxPass(px, w, h, 4, horizontal = true)
-            boxPass(px, w, h, 4, horizontal = false)
+            boxPass(px, w, h, r, horizontal = true)
+            boxPass(px, w, h, r, horizontal = false)
         }
         return Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
     }

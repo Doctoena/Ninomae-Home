@@ -1,5 +1,6 @@
 package dev.ninomae.home
 
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.input.pointer.pointerInput
@@ -74,6 +75,7 @@ private val CATS = listOf(
     Category("home", "grid_view", "Home screen"),
     Category("gestures", "swipe", "Gestures"),
     Category("edge", "view_sidebar", "Edge sidebar"),
+    Category("photos", "photo_library", "Photos"),
     Category("search", "search", "Search"),
     Category("glance", "event", "At a glance"),
     Category("bar", "smartphone", "Status bar"),
@@ -90,6 +92,8 @@ private val INDEX = listOf(
     Entry("look", "palette", "Colours", "color theme accent swatch samsung"),
     Entry("look", "apps", "App icons", "themed tint original icon"),
     Entry("look", "style", "Icon pack", "icons pack"),
+    Entry("look", "rounded_corner", "Icon shape", "circle round square squircle"),
+    Entry("look", "blur_on", "Glass", "frost blur tint dark transparent strength"),
     Entry("home", "person", "Your name", "greeting"),
     Entry("home", "grid_view", "Grid size", "columns rows across down layout"),
     Entry("home", "label", "App names", "labels text"),
@@ -103,6 +107,8 @@ private val INDEX = listOf(
     Entry("gestures", "touch_app", "Double-tap to lock", "lock screen off"),
     Entry("edge", "view_sidebar", "Edge sidebar", "side edge slide shortcuts favourites rail"),
     Entry("edge", "swap_horiz", "Edge sidebar side", "left right"),
+    Entry("photos", "photo_library", "Photos", "immich memories on this day favourites pictures gallery widget"),
+    Entry("photos", "key", "Immich API key", "server key photos"),
     Entry("search", "calculate", "Sums and conversions", "maths calculator units"),
     Entry("search", "person_search", "Contacts in search", "people call text"),
     Entry("search", "event", "Calendar in search", "events appointments"),
@@ -124,7 +130,10 @@ private val INDEX = listOf(
 fun SettingsPanel(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
     var page by rememberSaveable { mutableStateOf<String?>(null) }
     var q by remember { mutableStateOf("") }
-    LaunchedEffect(ui.layer) { if (ui.layer != Layer.Settings) { page = null; q = "" } }
+    LaunchedEffect(ui.layer) {
+        if (ui.layer != Layer.Settings) { page = null; q = "" }
+        else ui.settingsPage?.let { page = it; ui.settingsPage = null }
+    }
     BackHandler(enabled = page != null && ui.layer == Layer.Settings) { page = null }
 
     Box(modifier) {
@@ -268,23 +277,39 @@ private fun Bento(st: HomeState, compact: Boolean, open: (String) -> Unit) {
                 }
             }
         }
-        EdgeTile(st) { open("edge") }
+        // The two wide tiles, joined.
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            EdgeTile(st, corners(22.dp, 22.dp, 6.dp, 6.dp)) { open("edge") }
+            PhotosTile(st, corners(6.dp, 6.dp, 22.dp, 22.dp)) { open("photos") }
+        }
     }
 }
 
 /** A wide tile under the rest: the edge sidebar, with what it's set to. */
 @Composable
-private fun EdgeTile(st: HomeState, onClick: () -> Unit) {
-    val pal = LocalPal.current
+private fun EdgeTile(st: HomeState, shape: Shape, onClick: () -> Unit) {
     val state = if (!st.edgeOn) "Off" else listOf("On", if (st.edgeRight) "right" else "left", st.edgeList().size.let { if (it == 1) "1 app" else "$it apps" }).joinToString(" · ")
+    WideTile("view_sidebar", "Edge sidebar", state, shape, onClick)
+}
+
+@Composable
+private fun PhotosTile(st: HomeState, shape: Shape, onClick: () -> Unit) {
+    val state = if (!Photos.configured(st)) "Connect your Immich" else "Immich · " + when (st.immichMode) { 0 -> "on this day"; 1 -> "favourites"; else -> "random" }
+    WideTile("photo_library", "Photos", state, shape, onClick)
+}
+
+/** A wide tile under the bento: a badge, its name, and what it's set to. */
+@Composable
+private fun WideTile(glyph: String, name: String, state: String, shape: Shape, onClick: () -> Unit) {
+    val pal = LocalPal.current
     Row(
-        Modifier.fillMaxWidth().height(64.dp).glassPiece(RoundedCornerShape(22.dp)).pressScale(0.98f).clickable(onClick = onClick).padding(horizontal = 12.dp),
+        Modifier.fillMaxWidth().height(64.dp).glassPiece(shape).pressScale(0.98f).clickable(onClick = onClick).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        GlassBadge("view_sidebar")
+        GlassBadge(glyph)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Lbl("Edge sidebar", size = 15.sp, weight = FontWeight.Medium)
+            Lbl(name, size = 15.sp, weight = FontWeight.Medium)
             Lbl(state, size = 11.sp, color = pal.sub)
         }
         Glyph("north_east", size = 16.dp, color = pal.dim)
@@ -405,6 +430,7 @@ private fun PageBody(st: HomeState, ui: Ui, p: String) {
             { Row3("touch_app", "Double-tap to lock", "Uses accessibility") { GSwitch(st.doubleTapLock) { st.updateDoubleTapLock(!st.doubleTapLock) } } },
         )
         "edge" -> EdgePage(st)
+        "photos" -> PhotosPage(st)
         "search" -> Rows(
             { Row3("calculate", "Sums and conversions", "Type 12*7, 15% of 80, or 5 km to mi") {} },
             {
@@ -554,6 +580,72 @@ private fun LookPage(st: HomeState, ui: Ui) {
                             Lbl(name, size = 13.sp, color = if (on) pal.acc else pal.fg, weight = FontWeight.Medium)
                         }
                     }
+                }
+            }
+        },
+        // Icon shape: four cards, each showing your dock in that shape.
+        {
+            Column(Modifier.fillMaxWidth().glassPiece(LocalRowShape.current).padding(12.dp)) {
+                Lbl("Icon shape", Modifier.padding(start = 2.dp, bottom = 10.dp), size = 15.sp, weight = FontWeight.Medium)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("Squircle", "Circle", "Rounded", "Square").forEachIndexed { v, name ->
+                        val on = st.iconShape == v
+                        Column(
+                            Modifier.weight(1f).clip(RoundedCornerShape(14.dp))
+                                .background(if (on) pal.acc.copy(alpha = 0.18f) else glass(0.07f))
+                                .border(if (on) 2.dp else 1.dp, if (on) pal.acc else glassEdge(), RoundedCornerShape(14.dp))
+                                .clickable { st.updateIconShape(v) }.padding(vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            CompositionLocalProvider(LocalIconShape provides v) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    st.pinned.take(2).mapNotNull { st.app(it) }.forEach { GlassIcon(it, 24.dp) }
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Lbl(name, size = 12.sp, color = if (on) pal.acc else pal.fg, weight = FontWeight.Medium)
+                        }
+                    }
+                }
+            }
+        },
+        // Glass: how frosted, and how dark. This page sits on the glass, so it shows the change as you go.
+        {
+            Column(Modifier.fillMaxWidth().glassPiece(LocalRowShape.current).padding(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    GlassBadge("blur_on", 32.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Lbl("Glass", size = 15.sp, weight = FontWeight.Medium)
+                        Lbl("This page is on it, so you see the change as you go", size = 11.sp, color = pal.sub)
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Lbl("Frost", Modifier.weight(1f), size = 14.sp)
+                    Segs(listOf("Light", "Medium", "Heavy"), st.glassFrost) { st.updateGlassFrost(it) }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Lbl("Tint", Modifier.width(56.dp), size = 14.sp)
+                    // 0.5× (lighter) to 1.6× (darker) the designed wash; 1 sits a third of the way along.
+                    val f = ((st.glassTint - 0.5f) / 1.1f).coerceIn(0f, 1f)
+                    Box(
+                        Modifier.weight(1f).height(36.dp).clip(RoundedCornerShape(14.dp)).background(glass(0.10f))
+                            .slideToSet { v -> st.updateGlassTint(0.5f + 1.1f * v) },
+                    ) {
+                        Box(Modifier.fillMaxHeight().fillMaxWidth(f.coerceAtLeast(0.08f)).clip(RoundedCornerShape(14.dp)).background(pal.acc))
+                        Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Lbl("Lighter", Modifier.weight(1f), size = 11.sp, color = if (f > 0.2f) pal.ink else pal.sub)
+                            Lbl("Darker", size = 11.sp, color = pal.sub)
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    GPill("Reset") { st.updateGlassTint(1f) }
+                }
+                if (st.glassFrost == 0 && !Glass.canLighten(LocalContext.current)) {
+                    Spacer(Modifier.height(8.dp))
+                    Lbl("Light shows once the wallpaper is picked here again (above)", size = 11.sp, color = pal.sub, maxLines = 2)
                 }
             }
         },
@@ -880,5 +972,94 @@ private fun EdgePage(st: HomeState) {
                 }
             }
         }
+    }
+}
+
+/**
+ * Photos: your Immich server and API key for the photo widget, what it shows, and a connection check.
+ * The key stays on the phone and is left out of backups.
+ */
+@Composable
+private fun PhotosPage(st: HomeState) {
+    val pal = LocalPal.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var url by remember { mutableStateOf(st.immichUrl) }
+    var key by remember { mutableStateOf(st.immichKey) }
+    var showKey by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var testing by remember { mutableStateOf(false) }
+    // Saved when you leave the page (not on every key), then the widget reloads.
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { if (url.trim() != st.immichUrl || key.trim() != st.immichKey) st.updateImmich(url = url.trim(), key = key.trim()) }
+    }
+    fun test() {
+        st.updateImmich(url = url.trim(), key = key.trim())
+        testing = true
+        scope.launch {
+            status = Photos.test(st)
+            testing = false
+            Photos.refresh(st, force = true)
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        PhotoField("dns", "Immich server", url, "https://photos.example.com", corners(22.dp, 22.dp, 6.dp, 6.dp), false, { url = it }) {}
+        PhotoField("key", "API key", key, "Paste the key you made in Immich", RoundedCornerShape(6.dp), !showKey, { key = it }) {
+            Box(Modifier.size(40.dp).clip(CircleShape).clickable { showKey = !showKey }, contentAlignment = Alignment.Center) {
+                Glyph(if (showKey) "visibility_off" else "visibility", size = 18.dp, color = pal.sub)
+            }
+        }
+        Row(Modifier.fillMaxWidth().height(60.dp).glassPiece(RoundedCornerShape(6.dp)).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Lbl("Show", Modifier.weight(1f), size = 15.sp)
+            Segs(listOf("On this day", "Favourites", "Random"), st.immichMode) { st.updateImmich(mode = it) }
+        }
+        val ok = status != null && !status!!.startsWith("Not connected")
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 64.dp).glassPiece(corners(6.dp, 6.dp, 22.dp, 22.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier.size(32.dp).clip(CircleShape).background(if (ok) Color(0xFF8CCB9B) else glass(0.12f)),
+                contentAlignment = Alignment.Center,
+            ) { Glyph(if (ok) "check" else if (status != null) "cloud_off" else "sync", size = 18.dp, color = if (ok) Color(0xFF14301C) else pal.fg) }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Lbl(if (testing) "Checking…" else if (ok) "Connected" else if (status != null) "Not connected" else "Check the connection", size = 15.sp)
+                Lbl(status?.removePrefix("Not connected: ")?.replaceFirstChar { it.uppercase() } ?: "Reaches the server with your key", size = 11.sp, color = pal.sub, maxLines = 2)
+            }
+            Spacer(Modifier.width(8.dp))
+            GPill("Test") { if (!testing) test() }
+        }
+        Spacer(Modifier.height(12.dp))
+        Lbl(
+            "Make a key in Immich: Account settings → API keys. Give it access to assets and memories. " +
+                "At home, the server's address on your network works too (http://server.lan:2283). " +
+                "The key stays on this phone and isn't saved in backups.",
+            Modifier.padding(horizontal = 6.dp), size = 12.sp, color = pal.sub, maxLines = 6,
+        )
+    }
+}
+
+@Composable
+private fun PhotoField(glyph: String, title: String, value: String, hint: String, shape: Shape, hidden: Boolean, onChange: (String) -> Unit, trailing: @Composable () -> Unit) {
+    val pal = LocalPal.current
+    Row(Modifier.fillMaxWidth().glassPiece(shape).padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        GlassBadge(glyph)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Lbl(title, size = 15.sp, weight = FontWeight.Medium)
+            Spacer(Modifier.height(4.dp))
+            BasicTextField(
+                value, { onChange(it.trim()) }, Modifier.fillMaxWidth(), singleLine = true,
+                textStyle = TextStyle(color = pal.fg, fontSize = 13.sp, fontFamily = Sans),
+                cursorBrush = SolidColor(pal.acc),
+                visualTransformation = if (hidden) androidx.compose.ui.text.input.PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = if (hidden) androidx.compose.ui.text.input.KeyboardType.Password else androidx.compose.ui.text.input.KeyboardType.Uri,
+                    autoCorrectEnabled = false,
+                ),
+                decorationBox = { inner -> Box(contentAlignment = Alignment.CenterStart) { if (value.isEmpty()) Lbl(hint, size = 13.sp, color = pal.dim); inner() } },
+            )
+        }
+        trailing()
     }
 }

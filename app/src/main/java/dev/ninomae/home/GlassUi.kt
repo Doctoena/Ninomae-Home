@@ -70,7 +70,7 @@ fun GlassBackdrop(st: HomeState, progress: () -> Float) {
     }
     Box(
         Modifier.fillMaxSize().graphicsLayer { alpha = progress().coerceIn(0f, 1f) }
-            .background(pal.l0.copy(alpha = if (frosted != null) 0.34f else 0.84f)),
+            .background(pal.l0.copy(alpha = if (frosted != null) (0.34f * st.glassTint).coerceIn(0f, 0.95f) else 0.84f)),
     )
 }
 
@@ -98,7 +98,7 @@ fun GlassBadge(glyph: String, size: Dp = 38.dp) {
 fun GlassIcon(app: AppEntry, size: Dp) {
     val pal = LocalPal.current
     if (LocalThemedIcons.current && app.mono != null) {
-        val shape = RoundedCornerShape(size * 0.34f)
+        val shape = iconShape(size)
         Box(
             Modifier.size(size).clip(shape).background(glass(0.12f)).border(1.dp, Color.White.copy(alpha = 0.16f), shape),
             contentAlignment = Alignment.Center,
@@ -151,7 +151,8 @@ fun Dot(modifier: Modifier = Modifier, size: Dp = 9.dp) {
 fun Modifier.frosted(st: HomeState, shape: androidx.compose.ui.graphics.Shape, wash: Float = 0.30f, edge: Float = 0.22f): Modifier {
     val pal = LocalPal.current
     val pic = st.glass
-    val tint = if (pic != null) pal.l0.copy(alpha = wash) else pal.l1.copy(alpha = 0.88f)
+    // How dark the glass is can be set in Look (glassTint, 1 = as designed).
+    val tint = if (pic != null) pal.l0.copy(alpha = (wash * st.glassTint).coerceIn(0f, 0.95f)) else pal.l1.copy(alpha = 0.88f)
     return this.clip(shape)
         .then(FrostElement(pic, tint, androidx.compose.ui.platform.LocalView.current))
         .border(1.dp, Color.White.copy(alpha = edge), shape)

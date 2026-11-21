@@ -67,7 +67,7 @@ fun HomeState.addFeedAndroidWidget(widgetId: Int, w: Int, rows: Int) =
     commitFeed(feed + HomeItem(newId(), -1, 0, 0, feed.size, w.coerceIn(1, 2), rows.coerceIn(1, 5), type = "widget", widgetId = widgetId))
 
 fun HomeState.addFeedNinomae(kind: String) {
-    val rows = when (kind) { "stack" -> 3; else -> 1 }
+    val rows = when (kind) { "stack", "photos" -> 3; else -> 1 }
     commitFeed(feed + HomeItem(newId(), -1, 0, 0, feed.size, 2, rows, type = "nwidget", kind = kind))
 }
 
@@ -167,6 +167,8 @@ fun FeedPage(st: HomeState, ui: Ui, compact: Boolean) {
                     Column(width, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         // The calendar draws its own joined glass pieces and takes the height it needs.
                         if (item.type == "nwidget" && item.kind == "calendar") CalendarWidget(st, ui, Modifier.fillMaxWidth(), fit = false)
+                        // So does the photo widget, at its rows' height.
+                        else if (item.type == "nwidget" && item.kind == "photos") PhotoWidget(st, ui, Modifier.fillMaxWidth().height((FEED_ROW * tall).dp))
                         else BoxWithConstraints(Modifier.fillMaxWidth().height((FEED_ROW * tall).dp).frosted(st, shape, wash = 0.30f, edge = 0.2f)) {
                             when (item.type) {
                                 "widget" -> AndroidWidget(item.widgetId, maxWidth.value, maxHeight.value, Modifier.clip(shape))

@@ -30,7 +30,9 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Home">
+        android:theme="@style/Theme.Home"
+        android:usesCleartextTraffic="true">
+        <!-- Cleartext only so an Immich server on the home network (http://server.lan:2283) works. -->
 
         <activity
             android:name=".MainActivity"

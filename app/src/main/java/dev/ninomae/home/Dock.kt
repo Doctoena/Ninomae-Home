@@ -77,7 +77,7 @@ fun Dock(st: HomeState, ui: Ui, compact: Boolean, modifier: Modifier) {
         }
         Hairline()
         Box(
-            Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(pal.acc).pressScale().clickable { ui.toggle(Layer.Apps) },
+            Modifier.size(48.dp).clip(iconShape(48.dp)).background(pal.acc).pressScale().clickable { ui.toggle(Layer.Apps) },
             contentAlignment = Alignment.Center,
         ) { Glyph("apps", size = 24.dp, color = pal.ink) }
     }

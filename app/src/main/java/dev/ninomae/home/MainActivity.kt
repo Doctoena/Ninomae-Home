@@ -46,7 +46,7 @@ class MainActivity : ComponentActivity() {
         uri ?: return@registerForActivityResult
         Toast.makeText(this, "Setting your wallpaper…", Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
-            val set = Glass.setWallpaper(this@MainActivity, uri)
+            val set = Glass.setWallpaper(this@MainActivity, uri, st.glassFrost)
             if (set != null) st.setWallpaper(set)
             Toast.makeText(this@MainActivity, if (set != null) "Wallpaper set" else "Couldn't set that picture", Toast.LENGTH_SHORT).show()
         }
@@ -69,7 +69,7 @@ class MainActivity : ComponentActivity() {
         ui.restore = { openBackup.launch(arrayOf("application/json", "text/plain", "*/*")) }
         setContent {
             NinomaeTheme(st.colourSource, st.swatch, st.wallSeed) {
-              androidx.compose.runtime.CompositionLocalProvider(LocalThemedIcons provides (st.iconStyle == 1)) {
+              androidx.compose.runtime.CompositionLocalProvider(LocalThemedIcons provides (st.iconStyle == 1), LocalIconShape provides st.iconShape) {
                 // Home never closes on back; back only closes what's open.
                 BackHandler { if (ui.layer != Layer.None) ui.back() else ui.editing = false }
                 Home(st, ui)

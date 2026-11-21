@@ -8,10 +8,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.LaunchedEffect
@@ -39,9 +39,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
@@ -62,40 +59,47 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** A folder opened: its name (editable) over its apps. Drag an app out to take it out. */
 /**
- * An open folder (G1): a pane of frosted glass that grows out of the folder's icon, with the
- * wallpaper frosted inside it and the home screen left sharp around it. Apps sit four to a page
- * and swipe sideways. The joined pill top right adds apps (＋) or shows them all at once (↗).
+ * An open folder (A3 · Quiet): one small pane of frosted glass that grows out of the folder and hugs
+ * its apps, up to four across, with the name as a quiet caption (tap it to rename) and ＋ to pick apps.
+ * The folder's own icon lifts above the dim with a rose bar under it, and tapping it closes the folder.
  */
 @Composable
-fun FolderPopup(st: HomeState, ui: Ui, progress: () -> Float, modifier: Modifier) {
+fun FolderPopup(st: HomeState, ui: Ui, progress: () -> Float, lift: () -> Float, modifier: Modifier) {
     val pal = LocalPal.current
     val density = LocalDensity.current
     val folder = st.home.firstOrNull { it.id == ui.folderId && it.type == "folder" } ?: return
     val notes by NotifService.notes.collectAsState()
     val badged = remember(notes) { if (st.dots) notes.map { it.pkg }.toSet() else emptySet() }
     var adding by remember(folder.id) { mutableStateOf(false) }
-    var full by remember(folder.id) { mutableStateOf(false) }
-    LaunchedEffect(ui.inFolder) { if (!ui.inFolder) { adding = false; full = false } }
-    // The folder's icon on screen, to grow from (and to light up, in the grid).
-    val icon = Rect(
+    LaunchedEffect(ui.inFolder) { if (!ui.inFolder) adding = false }
+    // Where it grows from: the folder's icon if it was tapped, else its cell.
+    val cell = Rect(
         ui.gridRect.left + folder.x * ui.cellW, ui.gridRect.top + folder.y * ui.cellH,
         ui.gridRect.left + (folder.x + folder.w) * ui.cellW, ui.gridRect.top + (folder.y + folder.h) * ui.cellH,
     )
+    val lifted = ui.folderIcon
+    val icon = lifted ?: cell
     BoxWithConstraints(modifier) {
         val sw = constraints.maxWidth.toFloat()
         val sh = constraints.maxHeight.toFloat()
-        val cardW = minOf(maxWidth - 32.dp, 400.dp)
+        val cols = folder.apps.size.coerceIn(2, 4)
+        val cardW = if (adding) minOf(maxWidth - 32.dp, 360.dp) else 70.dp * cols + 16.dp
         val cardWpx = with(density) { cardW.toPx() }
         val margin = with(density) { 16.dp.toPx() }
-        val gap = with(density) { 10.dp.toPx() }
+        // Room for the lifted icon and its rose bar.
+        val gap = with(density) { if (lifted != null) 18.dp.toPx() else 10.dp.toPx() }
         val topLimit = with(density) { 64.dp.toPx() }
         var cardH by remember { mutableFloatStateOf(0f) }
         val above = icon.top - gap - cardH > topLimit
-        val x = (icon.center.x - cardWpx / 2).coerceIn(margin, sw - cardWpx - margin)
-        val y = if (above) icon.top - gap - cardH else minOf(icon.bottom + gap, sh - cardH - margin)
-        val shape = RoundedCornerShape(32.dp)
+        // Lined up with the folder's edge on its side of the screen, centred on it in the middle.
+        val x = when {
+            icon.center.x > sw * 0.62f -> icon.right + margin * 0.25f - cardWpx
+            icon.center.x < sw * 0.38f -> icon.left - margin * 0.25f
+            else -> icon.center.x - cardWpx / 2
+        }.coerceIn(margin, sw - cardWpx - margin)
+        val y = if (above) icon.top - gap - cardH else minOf(icon.bottom + gap * 1.4f, sh - cardH - margin)
+        val shape = RoundedCornerShape(26.dp)
         val frosted = st.glass
         Column(
             Modifier
@@ -124,80 +128,92 @@ fun FolderPopup(st: HomeState, ui: Ui, progress: () -> Float, modifier: Modifier
                         )
                     }
                 }
-                .background(if (frosted != null) pal.l0.copy(alpha = 0.30f) else pal.l1.copy(alpha = 0.92f))
+                .background(if (frosted != null) pal.l0.copy(alpha = (0.42f * st.glassTint).coerceIn(0f, 0.95f)) else pal.l1.copy(alpha = 0.92f))
                 .border(1.dp, Color.White.copy(alpha = 0.16f), shape)
                 .pointerInput(Unit) { detectTapGestures { } }
-                .padding(bottom = 14.dp),
+                .padding(bottom = 8.dp),
         ) {
-            FolderHeader(st, folder, adding, full, onAdd = { adding = !adding; full = false }, onFull = { full = !full; adding = false })
-            when {
-                adding -> FolderPicker(st, ui, folder)
-                full -> LazyVerticalGrid(
-                    GridCells.Fixed(4),
-                    Modifier.heightIn(max = 380.dp).padding(horizontal = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) { items(folder.apps, key = { it }) { FolderTile(st, ui, folder, it, badged) } }
-                else -> {
-                    val pages = folder.apps.chunked(4)
-                    val pager = rememberPagerState(pageCount = { pages.size })
-                    HorizontalPager(pager, Modifier.fillMaxWidth().padding(horizontal = 4.dp)) { i ->
-                        Row(Modifier.fillMaxWidth()) {
-                            pages[i].forEach { key -> Box(Modifier.weight(1f)) { FolderTile(st, ui, folder, key, badged) } }
-                            repeat(4 - pages[i].size) { Spacer(Modifier.weight(1f)) }
-                        }
-                    }
-                    if (pages.size > 1) Row(
-                        Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    ) {
-                        repeat(pages.size) { i ->
-                            val on = i == pager.currentPage
-                            Box(Modifier.size(if (on) 18.dp else 6.dp, 6.dp).clip(RoundedCornerShape(3.dp)).background(if (on) pal.acc else pal.sub.copy(alpha = 0.6f)))
-                        }
+            FolderCaption(st, folder, adding) { adding = !adding }
+            if (adding) FolderPicker(st, ui, folder)
+            else Column(
+                Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+            ) {
+                folder.apps.chunked(cols).forEach { row ->
+                    Row {
+                        row.forEach { key -> Box(Modifier.width(70.dp)) { FolderTile(st, ui, folder, key, badged) } }
                     }
                 }
             }
         }
-    }
-}
 
-/** The name (tap to rename), the count, and the joined ＋ ↗ pill. */
-@Composable
-private fun FolderHeader(st: HomeState, folder: HomeItem, adding: Boolean, full: Boolean, onAdd: () -> Unit, onFull: () -> Unit) {
-    val pal = LocalPal.current
-    var name by remember(folder.id) { mutableStateOf(folder.name) }
-    val focus = remember { FocusRequester() }
-    // Saved once, when the folder closes, rather than rewriting the whole home layout on every key.
-    androidx.compose.runtime.DisposableEffect(folder.id) {
-        onDispose { if (name != folder.name && st.home.any { it.id == folder.id }) st.renameFolder(folder.id, name) }
-    }
-    Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 14.dp, top = 16.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        BasicTextField(
-            name, { name = it.take(24) },
-            Modifier.width(androidx.compose.foundation.layout.IntrinsicSize.Min).widthIn(min = 40.dp, max = 200.dp).focusRequester(focus),
-            singleLine = true,
-            textStyle = TextStyle(color = pal.fg, fontSize = 24.sp, fontFamily = TitleFont, fontWeight = FontWeight.Black),
-            cursorBrush = SolidColor(pal.acc),
-            decorationBox = { inner -> Box { if (name.isEmpty()) Title("Folder", size = 24.sp, color = pal.dim); inner() } },
-        )
-        Spacer(Modifier.width(8.dp))
-        Lbl("${folder.apps.size}", size = 13.sp, color = pal.acc)
-        Spacer(Modifier.width(6.dp))
-        Glyph("edit", Modifier.clip(CircleShape).clickable { runCatching { focus.requestFocus() } }.padding(4.dp), size = 15.dp, color = pal.sub)
-        Spacer(Modifier.weight(1f))
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            PillPart(if (adding) "check" else "add", corners(14.dp, 5.dp, 5.dp, 14.dp), pal.acc, onAdd)
-            PillPart(if (full) "close_fullscreen" else "open_in_full", corners(5.dp, 14.dp, 14.dp, 5.dp), pal.fg, onFull)
+        // The folder itself, lifted over the dim with a rose bar under it. Tap it to close.
+        if (lifted != null) {
+            val w = with(density) { lifted.width.toDp() }
+            val liftShape = iconShape(w)
+            Box(
+                Modifier
+                    .offset { IntOffset(lifted.left.toInt(), lifted.top.toInt()) }
+                    .graphicsLayer {
+                        val e = lift()
+                        val k = 1f + 0.1f * e
+                        scaleX = k; scaleY = k
+                        translationY = -4.dp.toPx() * e
+                        shadowElevation = 14.dp.toPx() * e
+                        this.shape = liftShape
+                        clip = false
+                    }
+                    .clickable(interactionSource = null, indication = null) { ui.close() },
+            ) { FolderIcon(st, folder, w) }
+            Box(
+                Modifier
+                    .offset {
+                        IntOffset((lifted.center.x - 11.dp.toPx()).toInt(), (lifted.bottom + 7.dp.toPx()).toInt())
+                    }
+                    .graphicsLayer { alpha = lift(); scaleX = lift() }
+                    .size(22.dp, 4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(pal.acc),
+            )
         }
     }
 }
 
+/** The name as a small caption (tap it to rename), its count, and ＋ to pick apps. */
 @Composable
-private fun PillPart(glyph: String, shape: androidx.compose.ui.graphics.Shape, tint: Color, onClick: () -> Unit) {
-    Box(
-        Modifier.size(36.dp, 28.dp).clip(shape).background(Color.White.copy(alpha = 0.12f)).clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) { Glyph(glyph, size = 16.dp, color = tint) }
+private fun FolderCaption(st: HomeState, folder: HomeItem, adding: Boolean, onAdd: () -> Unit) {
+    val pal = LocalPal.current
+    var name by remember(folder.id) { mutableStateOf(folder.name) }
+    // Saved once, when the folder closes, rather than rewriting the whole home layout on every key.
+    androidx.compose.runtime.DisposableEffect(folder.id) {
+        onDispose { if (name != folder.name && st.home.any { it.id == folder.id }) st.renameFolder(folder.id, name) }
+    }
+    val caption = TextStyle(color = pal.sub, fontSize = 11.sp, fontFamily = Sans, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        BasicTextField(
+            name, { name = it.take(24) },
+            Modifier.width(androidx.compose.foundation.layout.IntrinsicSize.Min).widthIn(min = 24.dp, max = 180.dp),
+            singleLine = true,
+            textStyle = caption,
+            cursorBrush = SolidColor(pal.acc),
+            visualTransformation = Upper,
+            decorationBox = { inner -> Box { if (name.isEmpty()) Lbl("FOLDER", size = 11.sp, color = pal.dim, weight = FontWeight.Bold); inner() } },
+        )
+        Lbl("  ·  ${folder.apps.size}", size = 11.sp, color = pal.acc, weight = FontWeight.Bold)
+        Spacer(Modifier.weight(1f))
+        Box(
+            Modifier.size(34.dp, 26.dp).clip(RoundedCornerShape(13.dp))
+                .background(if (adding) pal.acc else Color.White.copy(alpha = 0.10f)).clickable(onClick = onAdd),
+            contentAlignment = Alignment.Center,
+        ) { Glyph(if (adding) "check" else "add", size = 17.dp, color = if (adding) pal.ink else pal.acc) }
+    }
+}
+
+/** Shows the folder's name in capitals while keeping what was typed. */
+private object Upper : androidx.compose.ui.text.input.VisualTransformation {
+    override fun filter(text: androidx.compose.ui.text.AnnotatedString) = androidx.compose.ui.text.input.TransformedText(
+        androidx.compose.ui.text.AnnotatedString(text.text.uppercase().let { if (it.length == text.length) it else text.text }),
+        androidx.compose.ui.text.input.OffsetMapping.Identity,
+    )
 }
 
 /** One app in a folder: tap to open, hold for its menu or to drag it out. */
@@ -218,15 +234,15 @@ private fun FolderTile(st: HomeState, ui: Ui, folder: HomeItem, key: String, bad
                     if (app != null) ui.showMenu(app, rect, above = false, fromDock = false, folderId = folder.id)
                 },
             )
-            .padding(vertical = 6.dp),
+            .padding(top = 6.dp, bottom = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box {
-            if (app != null) GlassIcon(app, 56.dp) else AppIcon(null, 56.dp)
+            if (app != null) GlassIcon(app, 48.dp) else AppIcon(null, 48.dp)
             if (app != null && app.pkg in badged) NoteBar()
         }
-        Spacer(Modifier.height(10.dp))
-        Lbl(app?.label ?: "Missing", Modifier.padding(horizontal = 2.dp), size = 12.sp, align = TextAlign.Center)
+        Spacer(Modifier.height(6.dp))
+        Lbl(app?.label ?: "Missing", Modifier.padding(horizontal = 3.dp), size = 11.sp, align = TextAlign.Center)
     }
 }
 

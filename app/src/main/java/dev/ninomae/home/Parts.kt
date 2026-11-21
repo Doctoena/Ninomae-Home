@@ -130,20 +130,22 @@ val LocalThemedIcons = androidx.compose.runtime.staticCompositionLocalOf { false
 fun AppIcon(app: AppEntry?, size: Dp, modifier: Modifier = Modifier) {
     val pal = LocalPal.current
     when {
-        app == null -> Box(modifier.size(size).clip(RoundedCornerShape(size * 0.3f)).background(pal.l5))
+        app == null -> Box(modifier.size(size).clip(iconShape(size)).background(pal.l5))
         LocalThemedIcons.current && app.mono != null -> Box(
-            modifier.size(size).clip(RoundedCornerShape(size * 0.3f)).background(mix(pal.l4, pal.acc, 0.16f)),
+            modifier.size(size).clip(iconShape(size)).background(mix(pal.l4, pal.acc, 0.16f)),
             contentAlignment = Alignment.Center,
         ) {
             Image(app.mono, app.label, Modifier.size(size * 0.86f), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(pal.acc))
         }
-        else -> Image(app.icon, app.label, modifier.size(size))
+        // The squircle leaves apps' own icons as they draw them; other shapes trim them to it.
+        LocalIconShape.current == 0 -> Image(app.icon, app.label, modifier.size(size))
+        else -> Image(app.icon, app.label, modifier.size(size).clip(iconShape(size)))
     }
 }
 
 @Composable
 fun PairIcon(a: AppEntry?, b: AppEntry?, size: Dp, modifier: Modifier = Modifier) {
-    Box(modifier.size(size).clip(RoundedCornerShape(size * 0.3f)).background(LocalPal.current.l5)) {
+    Box(modifier.size(size).clip(iconShape(size)).background(LocalPal.current.l5)) {
         AppIcon(a, size * 0.52f, Modifier.offset(size * 0.1f, size * 0.1f))
         AppIcon(b, size * 0.52f, Modifier.offset(size * 0.38f, size * 0.38f))
     }

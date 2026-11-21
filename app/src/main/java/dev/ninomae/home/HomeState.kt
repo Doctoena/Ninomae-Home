@@ -167,6 +167,31 @@ class HomeState private constructor(private val ctx: Context) {
         private set
     var edgeApps by mutableStateOf(list("edgeApps"))
         private set
+    /** Immich for the photo widget: the server's address, your API key, and what to show (0 on this day, 1 favourites, 2 random). */
+    var immichUrl by mutableStateOf(prefs.getString("immichUrl", "") ?: "")
+        private set
+    var immichKey by mutableStateOf(prefs.getString("immichKey", "") ?: "")
+        private set
+    var immichMode by mutableIntStateOf(prefs.getInt("immichMode", 0))
+        private set
+    fun updateImmich(url: String = immichUrl, key: String = immichKey, mode: Int = immichMode) {
+        immichUrl = url; immichKey = key; immichMode = mode
+        prefs.edit().putString("immichUrl", url).putString("immichKey", key).putInt("immichMode", mode).apply()
+    }
+    /** Look: the icon shape (see iconShapeOf), how dark the glass is (×, 1 as designed) and how frosted (0 light, 1 medium, 2 heavy). */
+    var iconShape by mutableIntStateOf(prefs.getInt("iconShape", 0))
+        private set
+    fun updateIconShape(v: Int) { iconShape = v; prefs.edit().putInt("iconShape", v).apply() }
+    var glassTint by androidx.compose.runtime.mutableFloatStateOf(prefs.getFloat("glassTint", 1f))
+        private set
+    fun updateGlassTint(v: Float) { glassTint = v; prefs.edit().putFloat("glassTint", v).apply() }
+    var glassFrost by mutableIntStateOf(prefs.getInt("glassFrost", 1))
+        private set
+    fun updateGlassFrost(v: Int) {
+        glassFrost = v
+        prefs.edit().putInt("glassFrost", v).apply()
+        scope.launch { Glass.refrost(ctx, v)?.let { glass = it } }
+    }
     fun updateEdgeOn(v: Boolean) { edgeOn = v; prefs.edit().putBoolean("edgeOn", v).apply() }
     fun updateEdgeRight(v: Boolean) { edgeRight = v; prefs.edit().putBoolean("edgeRight", v).apply() }
     /** Where it opens: at your thumb (false) or always in the middle of the screen (true). */
@@ -574,7 +599,8 @@ class HomeState private constructor(private val ctx: Context) {
     /** Everything you've set up, as JSON. Widgets come back only on this phone (their ids are local). */
     fun exportJson(): String {
         val o = JSONObject().put("ninomaeHome", 1)
-        prefs.all.forEach { (k, v) ->
+        // The Immich API key stays on the phone: a backup file is easy to share by mistake.
+        prefs.all.filterKeys { it != "immichKey" }.forEach { (k, v) ->
             when (v) {
                 is Boolean, is Int, is Long, is Float, is String -> o.put(k, JSONObject().put("t", v.javaClass.simpleName).put("v", v))
             }

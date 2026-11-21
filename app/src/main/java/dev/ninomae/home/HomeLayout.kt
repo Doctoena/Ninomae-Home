@@ -250,6 +250,7 @@ fun ninomaeSize(kind: String, screen: Int): Pair<Int, Int> = when (kind) {
     "stack" -> if (screen == 0) 4 to 3 else 4 to 3
     "clock" -> 4 to 1
     "calendar" -> 4 to 4
+    "photos" -> 4 to 2
     else -> 4 to 1
 }
 
@@ -259,5 +260,6 @@ val ninomaeWidgets = listOf(
     Triple("player", "Player", "What's playing, tinted by the cover"),
     Triple("jump", "Jump back in", "Your pairs and recent apps"),
     Triple("calendar", "Calendar", "This month and what's coming up"),
+    Triple("photos", "Photos", "On this day, favourites or random, from your Immich"),
     Triple("clock", "Clock", "A big clock and the date, right on the wallpaper"),
 )

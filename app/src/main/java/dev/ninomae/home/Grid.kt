@@ -1,6 +1,5 @@
 package dev.ninomae.home
 
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.gestures.detectDragGestures
 import android.accessibilityservice.AccessibilityService
 import androidx.compose.animation.core.animateDpAsState
@@ -221,6 +220,7 @@ private fun ItemView(st: HomeState, ui: Ui, item: HomeItem, cw: Dp, ch: Dp, badg
     val held = ui.layer == Layer.Menu && ui.menuHomeId == item.id
     val lift by androidx.compose.animation.core.animateFloatAsState(if (held) 1f else 0f, androidx.compose.animation.core.spring(0.6f, 500f), label = "lift")
     var rect by remember { mutableStateOf(Rect.Zero) }
+    var iconRect by remember { mutableStateOf<Rect?>(null) }
     Box(
         Modifier
             .offset(cw * item.x, ch * item.y)
@@ -254,15 +254,13 @@ private fun ItemView(st: HomeState, ui: Ui, item: HomeItem, cw: Dp, ch: Dp, badg
             "folder" -> if (item.w >= 2 && item.h >= 2) BigFolder(st, ui, item, badged, hold) else HomeIcon(
                 st, item.name.ifBlank { "Folder" },
                 st.dots && item.apps.any { st.app(it)?.pkg in badged },
-                Modifier.holdable(onTap = { if (!ui.editing) ui.openFolder(item.id) }, onHold = hold),
+                Modifier.holdable(onTap = { if (!ui.editing) ui.openFolder(item.id, iconRect) }, onHold = hold),
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    FolderIcon(st, item, 56.dp)
-                    // Lit while it's open, so you can see where the glass came from.
-                    if (ui.inFolder && ui.folderId == item.id) Box(
-                        Modifier.requiredSize(66.dp).border(2.dp, LocalPal.current.acc, RoundedCornerShape(22.dp)),
-                    )
-                }
+                // While it's open, the folder layer draws it lifted over the dim, in this same spot.
+                Box(
+                    Modifier.onGloballyPositioned { iconRect = it.boundsInRoot() }
+                        .alpha(if (ui.inFolder && ui.folderId == item.id && ui.folderIcon != null) 0f else 1f),
+                ) { FolderIcon(st, item, 56.dp) }
             }
             "shortcut" -> {
                 val info = remember(item.shortcutId) { Shortcuts.find(ctx, item.pkg, item.shortcutId, item.userSerial) }
@@ -321,7 +319,7 @@ private fun HomeIcon(st: HomeState, label: String, badge: Boolean, modifier: Mod
 @Composable
 fun FolderIcon(st: HomeState, item: HomeItem, size: Dp) {
     val pal = LocalPal.current
-    val shape = RoundedCornerShape(size * 0.33f)
+    val shape = iconShape(size)
     val apps = item.apps.take(4).map { st.app(it) }
     // Two apps side by side, bigger; three or four in a 2 × 2, all centred in a glass square.
     val cell = if (apps.size <= 2) size * 0.4f else size * 0.33f
@@ -493,6 +491,7 @@ fun NinomaeWidget(st: HomeState, ui: Ui, kind: String) {
         }
         "clock" -> ClockSlab(st)
         "calendar" -> CalendarWidget(st, ui, Modifier.fillMaxSize(), fit = true)
+        "photos" -> PhotoWidget(st, ui, Modifier.fillMaxSize())
     }
 }
 

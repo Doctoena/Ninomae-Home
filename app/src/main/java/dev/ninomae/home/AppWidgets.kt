@@ -191,7 +191,11 @@ private data class ProviderRow(val pkg: String, val app: AppEntry?, val label: S
 
 /** Sizes offered for Ninomae's own widgets (the clock fits a 2-wide spot or a full row). */
 private fun ninomaeSizes(kind: String, screen: Int): List<Pair<Int, Int>> =
-    if (kind == "clock") listOf(2 to 1, gridCols(screen) to 1) else listOf(ninomaeSize(kind, screen))
+    when (kind) {
+        "clock" -> listOf(2 to 1, gridCols(screen) to 1)
+        "photos" -> listOf(4 to 2, 2 to 2, 4 to 3)
+        else -> listOf(ninomaeSize(kind, screen))
+    }
 
 /**
  * Widget picker (W2 · Apps first): full screen on the drawer's glass. A joined list of the apps
@@ -346,6 +350,12 @@ private fun NinomaePreview(kind: String) {
                 Title(clockText(java.time.LocalDateTime.now()), size = 26.sp)
                 Spacer(Modifier.width(10.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) { repeat(3) { Box(Modifier.size(40.dp, 10.dp).clip(RoundedCornerShape(4.dp)).background(glass(0.12f))) } }
+            }
+            "photos" -> Column(Modifier.align(Alignment.CenterStart), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(Modifier.size(110.dp, 34.dp).clip(RoundedCornerShape(10.dp)).background(pal.acc.copy(alpha = 0.35f)), contentAlignment = Alignment.Center) {
+                    Glyph("photo_library", size = 18.dp, color = pal.fg)
+                }
+                Box(Modifier.size(110.dp, 14.dp).clip(RoundedCornerShape(5.dp)).background(glass(0.14f)))
             }
             "calendar" -> Column(Modifier.align(Alignment.CenterStart), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Lbl(java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("MMMM")), size = 13.sp, weight = FontWeight.Black, family = TitleFont)

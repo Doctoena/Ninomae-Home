@@ -108,6 +108,10 @@ class Ui {
     var pickWallpaper: () -> Unit = {}
     var restore: () -> Unit = {}
 
+    /** Open settings on one page (the photo widget sends you to Photos). */
+    var settingsPage by mutableStateOf<String?>(null)
+    fun openSettings(page: String) { settingsPage = page; layer = Layer.Settings }
+
     /** A short note above the dock ("The dock is full"), cleared after a moment. */
     var dockNote by mutableStateOf<String?>(null)
         private set
@@ -233,8 +237,12 @@ class Ui {
         layer = Layer.PairMaker
     }
 
-    fun openFolder(id: String) {
+    /** The folder's icon on screen when it was opened from it, so the icon can lift over the dim. */
+    var folderIcon by mutableStateOf<Rect?>(null)
+
+    fun openFolder(id: String, icon: Rect? = null) {
         folderId = id
+        folderIcon = icon
         layer = Layer.Folder
     }
 
@@ -440,7 +448,9 @@ fun Home(st: HomeState, ui: Ui) {
 
         // ---------- an open folder: glass grown out of its icon ----------
         val folderP by animateFloatAsState(if (ui.inFolder) 1f else 0f, spring(0.82f, 520f), label = "folder")
-        if (folderP > 0.001f) FolderPopup(st, ui, { folderP }, Modifier.fillMaxSize())
+        // The folder's icon lifts on its own soft spring (no bounce), drawn from the first frame so it never blinks.
+        val folderLift by animateFloatAsState(if (ui.inFolder) 1f else 0f, spring(1f, 300f), label = "folderLift")
+        if (ui.inFolder || folderP > 0.001f || folderLift > 0.001f) FolderPopup(st, ui, { folderP }, { folderLift }, Modifier.fillMaxSize())
 
         // ---------- menus, grown out of what was held ----------
         if (ui.layer == Layer.Menu) {
@@ -632,7 +642,7 @@ fun itemGlyph(item: HomeItem): String = when (item.type) {
     "folder" -> "folder"
     "shortcut" -> "shortcut"
     "stack" -> "layers"
-    "nwidget" -> when (item.kind) { "clock" -> "schedule"; "calendar" -> "calendar_month"; "player" -> "music_note"; "greeting" -> "waving_hand"; "jump" -> "history"; else -> "widgets" }
+    "nwidget" -> when (item.kind) { "clock" -> "schedule"; "calendar" -> "calendar_month"; "player" -> "music_note"; "greeting" -> "waving_hand"; "jump" -> "history"; "photos" -> "photo_library"; else -> "widgets" }
     else -> "widgets"
 }
 

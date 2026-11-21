@@ -149,6 +149,20 @@ object Rad {
     val dock = 20.dp
 }
 
+/** The icon shape chosen in Look: 0 squircle, 1 circle, 2 rounded square, 3 square. */
+val LocalIconShape = staticCompositionLocalOf { 0 }
+
+/** That shape at [size] (the squircle is the one the launcher always had). */
+fun iconShapeOf(kind: Int, size: Dp): androidx.compose.ui.graphics.Shape = when (kind) {
+    1 -> androidx.compose.foundation.shape.CircleShape
+    2 -> androidx.compose.foundation.shape.RoundedCornerShape(size * 0.22f)
+    3 -> androidx.compose.foundation.shape.RoundedCornerShape(size * 0.12f)
+    else -> androidx.compose.foundation.shape.RoundedCornerShape(size * 0.32f)
+}
+
+@Composable
+fun iconShape(size: Dp) = iconShapeOf(LocalIconShape.current, size)
+
 /** Rounded rect with its own corners: outer edges big, edges that touch a neighbour small. */
 fun corners(tl: Dp, tr: Dp, br: Dp, bl: Dp) =
     RoundedCornerShape(topStart = tl, topEnd = tr, bottomEnd = br, bottomStart = bl)
